@@ -1,0 +1,7 @@
+venv/
+__pycache__/
+.vscode/
+*.pyc
+
+eye_output.json
+head_output.json

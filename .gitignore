@@ -1,0 +1,16 @@
+# Hand Gesture Module
+WEEK-04/Hand_Gesture_Module/venv/
+
+# Eye & Head Movement Module
+WEEK-04/Eye-Head-Movement-Module-main/.venv/
+
+# Generic virtual environments
+venv/
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Windows
+desktop.ini
