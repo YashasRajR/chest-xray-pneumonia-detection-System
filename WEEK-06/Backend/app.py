@@ -2,8 +2,7 @@ import os
 import traceback
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import tensorflow as tf
-from utils import preprocess_image
+from prediction import get_model, run_inference
 
 app = Flask(__name__)
 # Enable CORS for React frontend integration
@@ -16,66 +15,54 @@ os.makedirs(UPLOADS_DIR, exist_ok=True)
 
 MODEL_PATH = os.path.join(BASE_DIR, 'models', 'mobilenetv2_pneumonia_model.keras')
 
-# Load the TensorFlow model globally on startup to improve performance
-print("Loading MobileNetV2 model...")
+# Pre-load the model when starting the server to avoid loading on every request
 try:
-    if os.path.exists(MODEL_PATH):
-        model = tf.keras.models.load_model(MODEL_PATH)
-        print("Model loaded successfully.")
-    else:
-        print(f"Warning: Model not found at {MODEL_PATH}")
-        model = None
+    get_model(MODEL_PATH)
 except Exception as e:
-    print(f"Failed to load model: {e}")
-    model = None
+    print(f"Warning: Could not pre-load model: {e}")
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    if model is None:
-        return jsonify({'error': 'Server offline: Model not loaded'}), 500
-
-    if 'image' not in request.files:
-        return jsonify({'error': 'No image file provided in request'}), 400
-
-    file = request.files['image']
-    if file.filename == '':
-        return jsonify({'error': 'No image selected'}), 400
-
-    # Ensure it's a valid image extension
-    allowed_extensions = {'png', 'jpg', 'jpeg'}
-    ext = file.filename.rsplit('.', 1)[-1].lower()
-    if ext not in allowed_extensions:
-        return jsonify({'error': 'Invalid file format. Only JPG, JPEG, and PNG are allowed.'}), 400
-
     try:
+        # Check if model is loaded properly
+        try:
+            get_model(MODEL_PATH)
+        except Exception:
+            return jsonify({'error': 'Server offline: Model not loaded'}), 500
+
+        # Validate that a file was uploaded
+        if 'image' not in request.files:
+            return jsonify({'error': 'No image file provided in request'}), 400
+
+        file = request.files['image']
+        if file.filename == '':
+            return jsonify({'error': 'No image selected'}), 400
+
+        # Validate file extension
+        allowed_extensions = {'.png', '.jpg', '.jpeg'}
+        ext = os.path.splitext(file.filename)[1].lower()
+        if ext not in allowed_extensions:
+            return jsonify({'error': f'Invalid file format. Only JPG, JPEG, and PNG are allowed. Received: {ext}'}), 400
+
         # Save temporarily
         file_path = os.path.join(UPLOADS_DIR, file.filename)
         file.save(file_path)
 
-        # Preprocess the image
-        img_tensor = preprocess_image(file_path)
-        if img_tensor is None:
-            return jsonify({'error': 'Failed to process image'}), 500
+        try:
+            # Run Inference
+            result_data = run_inference(MODEL_PATH, file_path)
+            status_code = 200
+        except Exception as preprocess_err:
+            print(f"Inference error: {preprocess_err}")
+            print(traceback.format_exc())
+            result_data = {'error': 'Failed to process or corrupted image'}
+            status_code = 400
+        finally:
+            # Clean up temporary file regardless of success or failure
+            if os.path.exists(file_path):
+                os.remove(file_path)
 
-        # Run inference
-        prediction_prob = model.predict(img_tensor)[0][0]
-
-        # Convert prediction to label and confidence
-        if prediction_prob >= 0.5:
-            prediction_label = "Pneumonia"
-            confidence = float(prediction_prob * 100)
-        else:
-            prediction_label = "Normal"
-            confidence = float((1 - prediction_prob) * 100)
-            
-        # Clean up temporary file
-        if os.path.exists(file_path):
-            os.remove(file_path)
-
-        return jsonify({
-            'prediction': prediction_label,
-            'confidence': round(confidence, 2)
-        }), 200
+        return jsonify(result_data), status_code
 
     except Exception as e:
         print(traceback.format_exc())

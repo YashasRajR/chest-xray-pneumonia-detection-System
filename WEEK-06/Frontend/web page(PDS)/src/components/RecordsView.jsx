@@ -261,8 +261,8 @@ export default function RecordsView() {
             </p>
           </div>
         ) : (
-          <div style={{ overflowX: 'auto', width: '100%' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left', whiteSpace: 'nowrap' }}>
+          <div style={{ overflowX: 'hidden', width: '100%' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left', wordBreak: 'break-word' }}>
               <thead>
                 <tr style={{ borderBottom: '2px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: '700' }}>
                   <th style={{ padding: '12px' }}>File Name</th>
@@ -311,39 +311,37 @@ export default function RecordsView() {
                       <button
                         onClick={() => setActiveReport(item)}
                         className="btn-secondary"
+                        title="View Report"
                         style={{
-                          padding: '4px 8px',
-                          fontSize: '0.75rem',
+                          padding: '6px',
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '4px',
+                          justifyContent: 'center',
                           cursor: 'pointer',
-                          margin: 0
+                          margin: 0,
+                          borderRadius: '6px'
                         }}
                       >
-                        <FileText size={12} />
-                        View
+                        <FileText size={16} />
                       </button>
                     </td>
                     <td style={{ padding: '12px', textAlign: 'right' }}>
                       <button
                         onClick={() => deleteRecord(item.id)}
                         style={{
-                          background: 'transparent',
+                          background: 'rgba(244, 63, 94, 0.1)',
                           border: 'none',
                           color: 'var(--accent-danger)',
-                          fontSize: '0.78rem',
-                          fontWeight: '600',
                           cursor: 'pointer',
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '6px',
-                          textDecoration: 'underline'
+                          justifyContent: 'center',
+                          padding: '6px',
+                          borderRadius: '6px'
                         }}
                         title="Delete log entry"
                       >
-                        <Trash2 size={12} />
-                        Delete
+                        <Trash2 size={16} />
                       </button>
                     </td>
                   </tr>

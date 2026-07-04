@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Eye, EyeOff, CheckCircle, AlertTriangle, RefreshCw, Cpu, Activity, Plus, Trash2, FileText } from 'lucide-react';
+import { Upload, Eye, EyeOff, CheckCircle, AlertTriangle, RefreshCw, Cpu, Activity, Plus, Trash2, FileText, Search } from 'lucide-react';
 import { predictImage } from '../services/api';
 
 // Symmetrical SVG Chest X-ray simulator
@@ -95,13 +95,13 @@ const ChestXraySVG = ({ type, isScanning, showHeatmap }) => {
 };
 
 export default function PneumoniaDetector() {
-  // Application state: 'idle' | 'processing' | 'result' | 'error'
+  // Application state: 'idle' | 'ready' | 'processing' | 'result' | 'error'
   const [appState, setAppState] = useState('idle');
   
   const [uploadedFile, setUploadedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [processingStep, setProcessingStep] = useState(0);
-  const [resultData, setResultData] = useState({ prediction: null, confidence: null, errorMsg: null });
+  const [resultData, setResultData] = useState({ prediction: null, confidence: null, rawScore: null, errorMsg: null });
   
   const [uploadHistory, setUploadHistory] = useState([]);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -129,22 +129,6 @@ export default function PneumoniaDetector() {
       } catch (err) {
         console.error("Error parsing upload registry:", err);
       }
-    } else {
-      const defaultMockRecords = [
-        {
-          id: 'REC-XP928',
-          patientId: 'PAT-8402',
-          name: 'patient_study_0842.png',
-          size: '1.42 MB',
-          date: '2026-06-27, 10:14:02 AM',
-          result: 'normal',
-          confidence: '98.1%',
-          model: 'DenseNet-121',
-          processingTime: '1.8s'
-        }
-      ];
-      localStorage.setItem('akshar_upload_history', JSON.stringify(defaultMockRecords));
-      setUploadHistory(defaultMockRecords);
     }
   }, []);
 
@@ -166,6 +150,45 @@ export default function PneumoniaDetector() {
       return () => clearInterval(interval);
     }
   }, [appState, resultData.confidence]);
+
+  const handleFileUpload = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length > 0) {
+      selectFile(files[0]);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) {
+      selectFile(files[0]);
+    }
+  };
+
+  const selectFile = (file) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+    if (!allowedTypes.includes(file.type)) {
+      setResultData({ prediction: null, confidence: null, rawScore: null, errorMsg: "Invalid File. Please upload a valid chest X-ray image (JPG/PNG)." });
+      setAppState('error');
+      return;
+    }
+
+    setUploadedFile(file);
+    const reader = new FileReader();
+    reader.onload = () => {
+      setPreviewUrl(reader.result);
+      setAppState('ready');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const executeAnalysis = () => {
+    if (!uploadedFile) return;
+    const apiPromise = predictImage(uploadedFile);
+    simulateProcessingTimeline(apiPromise);
+  };
 
   const simulateProcessingTimeline = async (apiPromise) => {
     setAppState('processing');
@@ -208,13 +231,17 @@ export default function PneumoniaDetector() {
     // Step 6: Completed
     await new Promise(r => setTimeout(r, 300));
 
-    if (apiError) {
-      setResultData({ prediction: null, confidence: null, errorMsg: apiError.message || "Backend server unavailable." });
+    if (apiError || !apiResult) {
+      setResultData({ prediction: null, confidence: null, rawScore: null, errorMsg: apiError?.message || "Prediction Failed or Network Error." });
+      setAppState('error');
+    } else if (apiResult.error) {
+      setResultData({ prediction: null, confidence: null, rawScore: null, errorMsg: apiResult.error });
       setAppState('error');
     } else {
       setResultData({
         prediction: apiResult.prediction,
         confidence: apiResult.confidence,
+        rawScore: apiResult.raw_score,
         errorMsg: null
       });
       setAppState('result');
@@ -228,6 +255,7 @@ export default function PneumoniaDetector() {
         date: new Date().toLocaleString(),
         result: apiResult.prediction.toLowerCase(),
         confidence: `${apiResult.confidence}%`,
+        rawScore: apiResult.raw_score,
         model: 'MobileNetV2',
         processingTime: '2.4s'
       };
@@ -240,46 +268,12 @@ export default function PneumoniaDetector() {
     }
   };
 
-  const handleFileUpload = (e) => {
-    const files = Array.from(e.target.files);
-    if (files.length > 0) {
-      processFile(files[0]);
-    }
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    setIsDragOver(false);
-    const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0) {
-      processFile(files[0]);
-    }
-  };
-
-  const processFile = (file) => {
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
-    if (!allowedTypes.includes(file.type)) {
-      setResultData({ prediction: null, confidence: null, errorMsg: "Please upload a valid chest X-ray image (JPG/PNG)." });
-      setAppState('error');
-      return;
-    }
-
-    setUploadedFile(file);
-    const reader = new FileReader();
-    reader.onload = () => {
-      setPreviewUrl(reader.result);
-      const apiPromise = predictImage(file);
-      simulateProcessingTimeline(apiPromise);
-    };
-    reader.readAsDataURL(file);
-  };
-
   const resetDetector = () => {
     setAppState('idle');
     setUploadedFile(null);
     setPreviewUrl(null);
     setProcessingStep(0);
-    setResultData({ prediction: null, confidence: null, errorMsg: null });
+    setResultData({ prediction: null, confidence: null, rawScore: null, errorMsg: null });
   };
 
   return (
@@ -343,17 +337,45 @@ export default function PneumoniaDetector() {
             </div>
           )}
 
-          {/* STATE: PROCESSING (Timeline & Skeleton) */}
+          {/* STATE: READY (File Selected, Awaiting Button Click) */}
+          {appState === 'ready' && (
+            <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px', flex: 1, justifyContent: 'center' }}>
+              <h3 style={{ fontSize: '1.4rem', marginBottom: '32px' }}>Image Ready for Analysis</h3>
+              <div style={{ display: 'flex', gap: '48px', width: '100%', maxWidth: '800px', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center' }}>
+                <div style={{ width: '250px', height: '250px', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-color)', background: '#000', flexShrink: 0 }}>
+                  <img src={previewUrl} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: '250px' }}>
+                  <div className="glass-panel" style={{ padding: '16px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                    <p style={{ margin: '0 0 8px 0', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Selected File</p>
+                    <p style={{ margin: 0, fontWeight: '600', color: 'var(--text-primary)', wordBreak: 'break-word' }}>{uploadedFile?.name}</p>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                      {(uploadedFile?.size / 1024 / 1024).toFixed(2)} MB
+                    </p>
+                  </div>
+                  <button className="btn-primary" onClick={executeAnalysis} style={{ padding: '14px', fontSize: '1.1rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}>
+                    <Activity size={20} />
+                    Analyze X-Ray
+                  </button>
+                  <button className="btn-secondary" onClick={resetDetector} style={{ padding: '10px' }}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* STATE: PROCESSING (Timeline & Scanner Animation) */}
           {appState === 'processing' && (
             <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px', flex: 1 }}>
               <h3 style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', fontSize: '1.4rem', marginBottom: '32px' }}>
                 <RefreshCw className="animate-spin text-cyan" size={24} />
-                Analyzing Chest X-ray...
+                Analyzing...
               </h3>
               
               <div style={{ display: 'flex', gap: '48px', width: '100%', maxWidth: '800px', flexWrap: 'wrap', justifyContent: 'center' }}>
                 {/* Image Preview with Scanning Beam */}
-                <div style={{ position: 'relative', width: '250px', height: '250px', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-color)', background: '#000', flexShrink: 0 }}>
+                <div style={{ position: 'relative', width: '250px', height: '250px', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-color)', background: '#000', flexShrink: 0, boxShadow: '0 0 20px rgba(0, 242, 254, 0.2)' }}>
                   <img src={previewUrl} alt="Scanning" style={{ width: '100%', height: '100%', objectFit: 'contain', opacity: 0.8 }} />
                   <div className="laser-scan-line"></div>
                 </div>
@@ -387,6 +409,9 @@ export default function PneumoniaDetector() {
                   })}
                 </div>
               </div>
+              <div style={{ marginTop: '24px', textAlign: 'center' }}>
+                <p style={{ margin: 0, color: 'var(--accent-cyan)', fontSize: '0.9rem', letterSpacing: '1px' }}>AI is analyzing your chest X-ray...</p>
+              </div>
             </div>
           )}
 
@@ -395,10 +420,10 @@ export default function PneumoniaDetector() {
             <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px', flex: 1 }}>
               <div style={{ background: 'rgba(244, 63, 94, 0.1)', border: '1px solid rgba(244, 63, 94, 0.3)', borderRadius: '12px', padding: '32px', textAlign: 'center', maxWidth: '400px' }}>
                 <AlertTriangle size={48} className="text-danger" style={{ margin: '0 auto 16px' }} />
-                <h3 style={{ color: 'var(--accent-danger)', marginBottom: '8px' }}>Image upload failed.</h3>
+                <h3 style={{ color: 'var(--accent-danger)', marginBottom: '8px' }}>Operation Failed</h3>
                 <p style={{ color: 'var(--text-secondary)', marginBottom: '24px' }}>{resultData.errorMsg}</p>
                 <button className="btn-primary" onClick={resetDetector} style={{ padding: '10px 24px' }}>
-                  Please try again
+                  Acknowledge & Try Again
                 </button>
               </div>
             </div>
@@ -440,11 +465,23 @@ export default function PneumoniaDetector() {
 
                 {/* Right: AI Prediction */}
                 <div style={{ flex: '1 1 350px', padding: '40px 32px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <div style={{ marginBottom: '8px', fontSize: '0.9rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: '700' }}>
-                    AI Diagnosis
+                  <div style={{ marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: '700' }}>
+                      AI Diagnosis
+                    </span>
+                    <span style={{ 
+                      fontSize: '0.75rem', 
+                      padding: '4px 8px', 
+                      borderRadius: '12px',
+                      background: resultData.prediction?.toLowerCase() === 'pneumonia' ? 'rgba(244, 63, 94, 0.15)' : 'rgba(2, 195, 154, 0.15)',
+                      color: resultData.prediction?.toLowerCase() === 'pneumonia' ? 'var(--accent-danger)' : 'var(--accent-teal)',
+                      fontWeight: '700'
+                    }}>
+                      {resultData.prediction?.toLowerCase() === 'pneumonia' ? 'Possible Pneumonia' : 'Healthy'}
+                    </span>
                   </div>
                   
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '32px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
                     {resultData.prediction?.toLowerCase() === 'pneumonia' ? (
                       <AlertTriangle className="text-danger animate-pulse-glow" size={42} />
                     ) : (
@@ -456,14 +493,23 @@ export default function PneumoniaDetector() {
                       color: resultData.prediction?.toLowerCase() === 'pneumonia' ? 'var(--accent-danger)' : 'var(--accent-teal)',
                       textShadow: `0 0 20px ${resultData.prediction?.toLowerCase() === 'pneumonia' ? 'rgba(244,63,94,0.4)' : 'rgba(2,195,154,0.4)'}`
                     }}>
-                      {resultData.prediction === 'Pneumonia' ? 'Pneumonia' : 'Normal'}
+                      {resultData.prediction === 'Pneumonia' || resultData.prediction === 'PNEUMONIA' ? 'PNEUMONIA' : 'NORMAL'}
                     </h2>
+                  </div>
+
+                  {/* AI Analysis Text */}
+                  <div style={{ padding: '16px', background: 'var(--bg-primary)', borderRadius: '8px', border: '1px solid var(--border-color)', marginBottom: '24px' }}>
+                    <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                      {resultData.prediction?.toLowerCase() === 'pneumonia' ? 
+                        "The uploaded chest X-ray contains radiographic features commonly associated with pneumonia. Clinical confirmation by a healthcare professional is recommended." : 
+                        "No significant radiographic patterns associated with pneumonia were detected. The uploaded chest X-ray appears normal based on the trained MobileNetV2 model."}
+                    </p>
                   </div>
 
                   <div style={{ marginBottom: '32px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                      <span style={{ fontWeight: '600', fontSize: '1.05rem' }}>Confidence Model Score</span>
-                      <span style={{ fontWeight: '800', fontSize: '1.05rem', color: 'var(--text-primary)' }}>{animatedConfidence.toFixed(1)}%</span>
+                      <span style={{ fontWeight: '600', fontSize: '1.05rem' }}>Confidence Meter</span>
+                      <span style={{ fontWeight: '800', fontSize: '1.05rem', color: 'var(--text-primary)' }}>{animatedConfidence.toFixed(2)}%</span>
                     </div>
                     <div style={{ height: '10px', background: 'var(--border-color)', borderRadius: '5px', overflow: 'hidden' }}>
                       <div style={{ 
@@ -473,6 +519,9 @@ export default function PneumoniaDetector() {
                         borderRadius: '5px',
                         transition: 'width 0.1s ease-out'
                       }}></div>
+                    </div>
+                    <div style={{ marginTop: '8px', textAlign: 'right', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                      Raw AI Score: <span style={{ fontFamily: 'var(--font-mono)' }}>{resultData.rawScore}</span>
                     </div>
                   </div>
 
@@ -487,12 +536,12 @@ export default function PneumoniaDetector() {
           )}
 
           {/* History Registry at the bottom (visible in idle/result) */}
-          {(appState === 'idle' || appState === 'result') && (
+          {(appState === 'idle' || appState === 'result' || appState === 'ready') && (
             <div style={{ width: '100%', borderTop: '1px solid var(--border-color)', paddingTop: '28px', marginTop: '32px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <h3 style={{ fontSize: '1.1rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Activity size={18} className="text-teal" />
-                  Radiography Image Upload Details & History
+                  Prediction History
                 </h3>
                 {uploadHistory.length > 0 && (
                   <button
@@ -503,7 +552,7 @@ export default function PneumoniaDetector() {
                     className="btn-secondary"
                     style={{ padding: '4px 10px', fontSize: '0.78rem', color: 'var(--accent-danger)', borderColor: 'rgba(244, 63, 94, 0.15)', cursor: 'pointer' }}
                   >
-                    Clear Registry
+                    Clear History
                   </button>
                 )}
               </div>
@@ -511,21 +560,20 @@ export default function PneumoniaDetector() {
               {uploadHistory.length === 0 ? (
                 <div className="tech-info-card" style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border-color)', padding: '16px', display: 'flex', justifyContent: 'center' }}>
                   <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', margin: 0 }}>
-                    No radiography scans registered. Upload a chest X-ray to initiate AI telemetry logging.
+                    No predictions logged.
                   </p>
                 </div>
               ) : (
-                <div style={{ overflowX: 'auto', width: '100%' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left', whiteSpace: 'nowrap' }}>
+                <div style={{ overflowX: 'hidden', width: '100%' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left', wordBreak: 'break-word' }}>
                     <thead>
                       <tr style={{ borderBottom: '2px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: '700' }}>
                         <th style={{ padding: '8px 12px' }}>File Name</th>
                         <th style={{ padding: '8px 12px' }}>Patient ID</th>
-                        <th style={{ padding: '8px 12px' }}>Scan Date</th>
+                        <th style={{ padding: '8px 12px' }}>Date & Time</th>
                         <th style={{ padding: '8px 12px' }}>AI Result</th>
                         <th style={{ padding: '8px 12px' }}>Confidence</th>
-                        <th style={{ padding: '8px 12px' }}>Model</th>
-                        <th style={{ padding: '8px 12px' }}>Processing Time</th>
+                        <th style={{ padding: '8px 12px' }}>Raw Score</th>
                         <th style={{ padding: '8px 12px', textAlign: 'center' }}>Report</th>
                         <th style={{ padding: '8px 12px', textAlign: 'right' }}>Actions</th>
                       </tr>
@@ -551,32 +599,31 @@ export default function PneumoniaDetector() {
                                 borderRadius: '12px', 
                                 fontSize: '0.72rem', 
                                 fontWeight: '700',
-                                background: item.result === 'pneumonia' ? 'rgba(244, 63, 94, 0.08)' : 'rgba(20, 104, 117, 0.08)',
-                                color: item.result === 'pneumonia' ? 'var(--accent-danger)' : 'var(--accent-teal)'
+                                background: item.result === 'pneumonia' || item.result === 'PNEUMONIA' ? 'rgba(244, 63, 94, 0.08)' : 'rgba(20, 104, 117, 0.08)',
+                                color: item.result === 'pneumonia' || item.result === 'PNEUMONIA' ? 'var(--accent-danger)' : 'var(--accent-teal)'
                               }}
                             >
-                              {item.result === 'pneumonia' ? 'Pneumonia Detected' : 'Normal'}
+                              {item.result === 'pneumonia' || item.result === 'PNEUMONIA' ? 'Pneumonia Detected' : 'Normal'}
                             </span>
                           </td>
-                          <td style={{ padding: '10px 12px', fontWeight: '700' }}>{item.confidence || (item.result === 'pneumonia' ? '92.4%' : '98.1%')}</td>
-                          <td style={{ padding: '10px 12px', color: 'var(--text-muted)' }}>{item.model || 'DenseNet-121'}</td>
-                          <td style={{ padding: '10px 12px', color: 'var(--text-muted)' }}>{item.processingTime || '1.5s'}</td>
+                          <td style={{ padding: '10px 12px', fontWeight: '700' }}>{item.confidence}</td>
+                          <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{item.rawScore || '-'}</td>
                           <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                             <button
                               onClick={() => setActiveReport(item)}
                               className="btn-secondary"
+                              title="View Report"
                               style={{
-                                padding: '2px 6px',
-                                fontSize: '0.72rem',
+                                padding: '6px',
                                 display: 'inline-flex',
                                 alignItems: 'center',
-                                gap: '4px',
+                                justifyContent: 'center',
                                 cursor: 'pointer',
-                                margin: 0
+                                margin: 0,
+                                borderRadius: '6px'
                               }}
                             >
-                              <FileText size={11} />
-                              View
+                              <FileText size={16} />
                             </button>
                           </td>
                           <td style={{ padding: '10px 12px', textAlign: 'right' }}>
@@ -587,16 +634,19 @@ export default function PneumoniaDetector() {
                                 localStorage.setItem('akshar_upload_history', JSON.stringify(updated));
                               }}
                               style={{
-                                background: 'transparent',
+                                background: 'rgba(244, 63, 94, 0.1)',
                                 border: 'none',
                                 color: 'var(--accent-danger)',
-                                fontSize: '0.8rem',
-                                fontWeight: '600',
                                 cursor: 'pointer',
-                                textDecoration: 'underline'
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                padding: '6px',
+                                borderRadius: '6px'
                               }}
+                              title="Delete scan"
                             >
-                              Delete
+                              <Trash2 size={16} />
                             </button>
                           </td>
                         </tr>
@@ -635,14 +685,20 @@ export default function PneumoniaDetector() {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-muted)' }}>AI Diagnostic Class:</span>
-                <span style={{ color: activeReport.result === 'pneumonia' ? 'var(--accent-danger)' : 'var(--accent-teal)', fontWeight: 'bold' }}>
-                  {activeReport.result === 'pneumonia' ? 'Pneumonia Detected' : 'Normal / Healthy'}
+                <span style={{ color: activeReport.result === 'pneumonia' || activeReport.result === 'PNEUMONIA' ? 'var(--accent-danger)' : 'var(--accent-teal)', fontWeight: 'bold' }}>
+                  {activeReport.result === 'pneumonia' || activeReport.result === 'PNEUMONIA' ? 'Pneumonia Detected' : 'Normal / Healthy'}
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Confidence Metric:</span>
-                <span style={{ fontWeight: 'bold' }}>{activeReport.confidence || (activeReport.result === 'pneumonia' ? '92.4%' : '98.1%')}</span>
+                <span style={{ fontWeight: 'bold' }}>{activeReport.confidence}</span>
               </div>
+              {activeReport.rawScore && (
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Raw AI Score:</span>
+                  <span style={{ fontWeight: 'bold', fontFamily: 'var(--font-mono)' }}>{activeReport.rawScore}</span>
+                </div>
+              )}
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-muted)' }}>CNN Model Architecture:</span>
                 <span>{activeReport.model || 'DenseNet-121'}</span>
