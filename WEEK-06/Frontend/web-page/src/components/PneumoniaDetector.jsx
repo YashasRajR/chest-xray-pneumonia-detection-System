@@ -749,7 +749,7 @@ export default function PneumoniaDetector({ roleMode }) {
                             }}
                             onClick={() => {
                               if (item.imagePath) {
-                                window.open(`http://127.0.0.1:5000/uploads/${item.imagePath}`, '_blank');
+                                window.open(`/uploads/${item.imagePath}`, '_blank');
                               } else {
                                 alert('Original image not available for this legacy record.');
                               }
@@ -902,7 +902,7 @@ export default function PneumoniaDetector({ roleMode }) {
               {activeReport.imagePath && (
                 <div style={{ width: '220px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                   <img 
-                    src={activeReport.imagePath.startsWith('blob:') ? activeReport.imagePath : `http://127.0.0.1:5000/uploads/${activeReport.imagePath}`} 
+                    src={activeReport.imagePath.startsWith('blob:') ? activeReport.imagePath : `/uploads/${activeReport.imagePath}`} 
                     alt="Radiograph" 
                     style={{ width: '100%', maxHeight: '200px', objectFit: 'contain', border: '1px solid #cccccc', marginBottom: '5px', background: '#000000' }} 
                   />
