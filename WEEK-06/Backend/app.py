@@ -11,7 +11,7 @@ import jwt
 from functools import wraps
 from flask_bcrypt import Bcrypt
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='../Frontend/web-page/dist', static_url_path='/')
 # Enable CORS for React frontend integration
 CORS(app)
 bcrypt = Bcrypt(app)
@@ -381,6 +381,14 @@ from flask import send_from_directory
 @app.route('/uploads/<path:filename>', methods=['GET'])
 def get_upload(filename):
     return send_from_directory(UPLOADS_DIR, filename)
+
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve(path):
+    if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
+        return send_from_directory(app.static_folder, path)
+    else:
+        return send_from_directory(app.static_folder, 'index.html')
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
