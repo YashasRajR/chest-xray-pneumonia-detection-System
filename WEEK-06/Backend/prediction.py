@@ -3,6 +3,8 @@ import numpy as np
 from PIL import Image
 import tensorflow as tf
 
+import keras
+
 # Global variable to hold the model in memory
 _model = None
 
@@ -21,12 +23,12 @@ def get_model(model_path):
         # custom_objects is required to load a model containing a Lambda layer
         # if the Lambda layer wraps preprocess_input.
         custom_objects = {
-            '<lambda>': lambda x: tf.keras.applications.mobilenet_v2.preprocess_input(x),
-            'preprocess_input': tf.keras.applications.mobilenet_v2.preprocess_input
+            '<lambda>': lambda x: keras.applications.mobilenet_v2.preprocess_input(x),
+            'preprocess_input': keras.applications.mobilenet_v2.preprocess_input
         }
         
         try:
-            _model = tf.keras.models.load_model(model_path, custom_objects=custom_objects)
+            _model = keras.models.load_model(model_path, custom_objects=custom_objects)
             print("Model loaded successfully.")
         except Exception as e:
             print(f"Failed to load model: {e}")

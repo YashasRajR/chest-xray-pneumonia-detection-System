@@ -10,16 +10,16 @@ export default function HomeView({ user, setActiveTab, roleMode }) {
       {/* Welcome Banner */}
       <div className="glass-panel glass-welcome-banner" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div className="status-dot animate-pulse-glow" style={{ width: '8px', height: '8px', background: 'var(--accent-teal)' }}></div>
-          <span style={{ fontSize: '0.72rem', fontWeight: '700', letterSpacing: '0.08em', color: 'var(--accent-teal)', textTransform: 'uppercase' }}>
-            Interactive Diagnostic Workspace
+          <div className="status-dot animate-pulse-glow" style={{ width: '8px', height: '8px', background: 'var(--accent-success)' }}></div>
+          <span style={{ fontSize: '0.75rem', fontWeight: '700', letterSpacing: '0.05em', color: 'var(--accent-success)', textTransform: 'uppercase' }}>
+            Secure Patient Portal
           </span>
         </div>
         <h2 style={{ fontSize: '1.8rem', fontWeight: '800' }}>
           Welcome back, {user.name}
         </h2>
-        <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', maxWidth: '650px' }}>
-          You have successfully authenticated into the Akshar AI Medical Portal. Access your clinical utilities, model training diagnostics, and x-ray scanning nodes from this central hub.
+        <p style={{ fontSize: '1rem', color: 'var(--text-secondary)', maxWidth: '650px' }}>
+          You have successfully logged into the Akshar AI Medical Portal. From here, you can securely upload your X-rays, review your past results, and manage your account.
         </p>
       </div>
 
@@ -48,18 +48,18 @@ export default function HomeView({ user, setActiveTab, roleMode }) {
           }}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div className="tech-info-icon" style={{ background: 'rgba(2, 195, 154, 0.08)', color: 'var(--accent-cyan)', width: '36px', height: '36px', borderRadius: '8px' }}>
+            <div className="tech-info-icon" style={{ background: 'rgba(2, 132, 199, 0.08)', color: 'var(--accent-teal)', width: '36px', height: '36px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Upload size={18} />
             </div>
             <div>
-              <h3 style={{ fontSize: '1.1rem', marginBottom: '4px' }}>AI Upload Scanner</h3>
-              <p style={{ fontSize: '0.76rem', color: 'var(--text-secondary)' }}>
-                Drag & drop or select chest X-ray images to run real-time neural scans and heatmaps.
+              <h3 style={{ fontSize: '1.1rem', marginBottom: '4px' }}>Upload X-Ray</h3>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                Securely upload your chest X-ray to receive an instant, AI-assisted preliminary scan.
               </p>
             </div>
           </div>
-          <span style={{ fontSize: '0.72rem', fontWeight: '700', color: 'var(--accent-teal)', display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '12px' }}>
-            Initialize Scan Node &rarr;
+          <span style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--accent-teal)', display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '12px' }}>
+            Start Scan &rarr;
           </span>
         </div>
 
@@ -85,18 +85,18 @@ export default function HomeView({ user, setActiveTab, roleMode }) {
           }}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div className="tech-info-icon" style={{ background: 'rgba(5, 102, 141, 0.08)', color: 'var(--accent-blue)', width: '36px', height: '36px', borderRadius: '8px' }}>
+            <div className="tech-info-icon" style={{ background: 'rgba(14, 165, 233, 0.08)', color: 'var(--accent-cyan)', width: '36px', height: '36px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Cpu size={18} />
             </div>
             <div>
-              <h3 style={{ fontSize: '1.1rem', marginBottom: '4px' }}>Model Metrics</h3>
-              <p style={{ fontSize: '0.76rem', color: 'var(--text-secondary)' }}>
-                Review convolutional neural network specifications, model parameters, and sensitivity charts.
+              <h3 style={{ fontSize: '1.1rem', marginBottom: '4px' }}>How It Works</h3>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                Learn how our AI securely and accurately analyzes your X-rays to assist with diagnosis.
               </p>
             </div>
           </div>
-          <span style={{ fontSize: '0.72rem', fontWeight: '700', color: 'var(--accent-teal)', display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '12px' }}>
-            View Model Statistics &rarr;
+          <span style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--accent-cyan)', display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '12px' }}>
+            Learn More &rarr;
           </span>
         </div>
 
@@ -122,30 +122,30 @@ export default function HomeView({ user, setActiveTab, roleMode }) {
           }}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div className="tech-info-icon" style={{ background: 'rgba(0, 168, 150, 0.08)', color: 'var(--accent-purple)', width: '36px', height: '36px', borderRadius: '8px' }}>
+            <div className="tech-info-icon" style={{ background: 'rgba(59, 130, 246, 0.08)', color: 'var(--accent-purple)', width: '36px', height: '36px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <User size={18} />
             </div>
             <div>
-              <h3 style={{ fontSize: '1.1rem', marginBottom: '4px' }}>My Account</h3>
-              <p style={{ fontSize: '0.76rem', color: 'var(--text-secondary)' }}>
-                Inspect registered metadata, mobile credentials, license encryption logs, and sessions.
+              <h3 style={{ fontSize: '1.1rem', marginBottom: '4px' }}>My Profile</h3>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                Manage your personal information and view your secure session details.
               </p>
             </div>
           </div>
-          <span style={{ fontSize: '0.72rem', fontWeight: '700', color: 'var(--accent-teal)', display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '12px' }}>
-            Access Profile Keys &rarr;
+          <span style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--accent-purple)', display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '12px' }}>
+            View Profile &rarr;
           </span>
         </div>
 
       </div>
 
       {/* Footer Banner */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.7rem', color: 'var(--text-muted)', borderTop: '1px solid var(--border-color)', paddingTop: '10px', marginTop: '4px' }}>
-        <Shield size={12} className="text-teal" />
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', color: 'var(--text-muted)', borderTop: '1px solid var(--border-color)', paddingTop: '16px', marginTop: '8px' }}>
+        <Shield size={14} className="text-teal" />
         <span>
           {isTech 
-            ? 'Operator session complies with TLS 1.3 encryption norms. Diagnostics audited under HIPAA compliance.' 
-            : 'Patient connection complies with HIPAA secure storage parameters. Diagnostics logs encrypted.'}
+            ? 'Operator session is secure and private.' 
+            : 'Your connection is secure and private.'}
         </span>
       </div>
 

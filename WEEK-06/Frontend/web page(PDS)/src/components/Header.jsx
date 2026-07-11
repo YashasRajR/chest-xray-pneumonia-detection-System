@@ -6,8 +6,6 @@ export default function Header({
   onLogout, 
   activeTab, 
   setActiveTab, 
-  theme, 
-  setTheme, 
   roleMode, 
   setRoleMode 
 }) {
@@ -19,15 +17,15 @@ export default function Header({
   };
 
   return (
-    <header className="header-wrapper">
-      <div className="container header-container">
+    <header className="header-wrapper" style={{ padding: '16px 0', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-card)' }}>
+      <div className="container header-container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 24px' }}>
         
         {/* Left: Logo & Company Name */}
         <a 
           href="#" 
           className="logo" 
           onClick={(e) => { e.preventDefault(); if (user) { setActiveTab('home'); } else { setActiveTab('about'); } }}
-          style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}
+          style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none', flex: 1 }}
         >
           <img 
             src="/AksharAI_Logo.png" 
@@ -44,11 +42,11 @@ export default function Header({
           </div>
         </a>
 
-        {/* Center/Right section: Nav links when logged in */}
+        {/* Center section: Nav links when logged in */}
         {user ? (
-          /* LOGGED IN NAVIGATION: Home, About, Uploads, Profile, Theme */
-          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-            <nav style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+          <>
+            {/* LOGGED IN NAVIGATION: Home, About, Uploads, Profile */}
+            <nav style={{ display: 'flex', gap: '24px', alignItems: 'center', justifyContent: 'center', flex: 2 }}>
               <span 
                 onClick={() => setActiveTab('home')} 
                 className={`nav-link ${activeTab === 'home' ? 'active' : ''}`}
@@ -73,6 +71,22 @@ export default function Header({
               >
                 About
               </span>
+              
+              {roleMode === 'technician' && (
+                <span 
+                  onClick={() => setActiveTab('dashboard')} 
+                  className={`nav-link ${activeTab === 'dashboard' ? 'active' : ''}`}
+                  style={{ 
+                    fontSize: '0.85rem', 
+                    fontWeight: activeTab === 'dashboard' ? '700' : '500', 
+                    cursor: 'pointer', 
+                    color: activeTab === 'dashboard' ? 'var(--accent-teal)' : 'var(--text-secondary)' 
+                  }}
+                >
+                  Dashboard
+                </span>
+              )}
+
               <span 
                 onClick={() => setActiveTab('uploads')} 
                 className={`nav-link ${activeTab === 'uploads' ? 'active' : ''}`}
@@ -110,37 +124,20 @@ export default function Header({
                 Profile
               </span>
               
-              {/* Theme Link (acting as navigation) */}
-              <span 
-                onClick={() => {
-                  const themes = ['light', 'dark', 'soft', 'warm'];
-                  const nextIndex = (themes.indexOf(theme) + 1) % themes.length;
-                  setTheme(themes[nextIndex]);
-                }} 
-                className="nav-link"
-                style={{ 
-                  fontSize: '0.85rem', 
-                  fontWeight: '500', 
-                  cursor: 'pointer', 
-                  color: 'var(--text-secondary)',
-                }}
-                title={`Cycle Theme (Current: ${theme})`}
-              >
-                theme
-              </span>
             </nav>
 
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flex: 1 }}>
             {/* Profile Greeting & LogOut */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderLeft: '1px solid var(--border-color)', paddingLeft: '12px' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)' }}>{user.name}</span>
+              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>{user.name}</span>
               <button 
                 onClick={onLogout}
                 style={{
                   background: 'rgba(244, 63, 94, 0.08)',
                   border: '1px solid rgba(244, 63, 94, 0.15)',
                   color: 'var(--accent-danger)',
-                  padding: '4px',
-                  borderRadius: '4px',
+                  padding: '6px',
+                  borderRadius: '6px',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
@@ -151,10 +148,11 @@ export default function Header({
                 onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(244, 63, 94, 0.15)'}
                 onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(244, 63, 94, 0.08)'}
               >
-                <LogOut size={12} />
+                <LogOut size={14} />
               </button>
             </div>
           </div>
+          </>
         ) : (
           /* LOGGED OUT LANDING HEADER: Theme, Role switcher & Gateway */
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -165,58 +163,7 @@ export default function Header({
               </div>
             </div>
 
-            {/* Theme Cycling Toggle Button */}
-            <button
-              onClick={() => {
-                const themes = ['light', 'dark', 'soft', 'warm'];
-                const nextIndex = (themes.indexOf(theme) + 1) % themes.length;
-                setTheme(themes[nextIndex]);
-              }}
-              style={{
-                background: 'var(--bg-secondary)',
-                border: '1px solid var(--border-color)',
-                color: 'var(--text-primary)',
-                padding: '4px 10px',
-                borderRadius: '20px',
-                fontSize: '0.7rem',
-                fontWeight: '700',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                transition: 'var(--transition-fast)',
-                boxShadow: '0 2px 6px rgba(0, 0, 0, 0.03)',
-                textTransform: 'uppercase',
-                letterSpacing: '0.04em'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'var(--accent-teal)';
-                e.currentTarget.style.color = 'var(--accent-teal)';
-                e.currentTarget.style.boxShadow = '0 2px 8px var(--glow-cyan)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'var(--border-color)';
-                e.currentTarget.style.color = 'var(--text-primary)';
-                e.currentTarget.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.03)';
-              }}
-              title={`Cycle Theme (Current: ${theme})`}
-            >
-              <span style={{ 
-                width: '5px', 
-                height: '5px', 
-                borderRadius: '50%', 
-                background: 
-                  theme === 'light' ? '#286FA5' :
-                  theme === 'dark' ? '#88CDF6' :
-                  theme === 'soft' ? '#7c482c' : '#0fa282',
-                boxShadow: `0 0 4px ${
-                  theme === 'light' ? '#286FA5' :
-                  theme === 'dark' ? '#88CDF6' :
-                  theme === 'soft' ? '#7c482c' : '#0fa282'
-                }`
-              }}></span>
-              <span>{theme}</span>
-            </button>
+            {/* Removed Theme Cycling Toggle Button */}
 
             {/* Role Perspective Switcher Button */}
             <button

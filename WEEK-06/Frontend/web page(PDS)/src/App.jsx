@@ -6,6 +6,7 @@ import Footer from './components/Footer';
 import HomeView from './components/HomeView';
 import PneumoniaDetector from './components/PneumoniaDetector';
 import RecordsView from './components/RecordsView';
+import TechnicianDashboard from './components/TechnicianDashboard';
 import { ArrowLeft } from 'lucide-react';
 import './App.css';
 
@@ -14,7 +15,6 @@ function App() {
   const [activeTab, setActiveTab] = useState('about');
   
   // Header selectors state
-  const [theme, setTheme] = useState('warm');
   const [roleMode, setRoleMode] = useState('patient');
 
   // Load user session from localStorage if available
@@ -37,12 +37,6 @@ function App() {
     }
   }, []);
 
-  // Update body class whenever theme changes
-  useEffect(() => {
-    document.body.className = '';
-    document.body.classList.add(`theme-${theme}`);
-  }, [theme]);
-
   const handleLogin = (userData) => {
     setUser(userData);
     localStorage.setItem('akshar_operator', JSON.stringify(userData));
@@ -52,6 +46,7 @@ function App() {
   const handleLogout = () => {
     setUser(null);
     localStorage.removeItem('akshar_operator');
+    localStorage.removeItem('akshar_token');
     setActiveTab('about'); // Return to Landing Page's About view
   };
 
@@ -63,8 +58,6 @@ function App() {
         onLogout={handleLogout} 
         activeTab={activeTab} 
         setActiveTab={setActiveTab}
-        theme={theme}
-        setTheme={setTheme}
         roleMode={roleMode}
         setRoleMode={setRoleMode}
       />
@@ -126,7 +119,7 @@ function App() {
               )}
               {activeTab === 'uploads' && (
                 <div className="glass-panel" style={{ padding: '20px', flex: 1, minHeight: 0, overflowY: 'auto' }}>
-                  <PneumoniaDetector />
+                  <PneumoniaDetector roleMode={roleMode} />
                 </div>
               )}
               {activeTab === 'records' && (
@@ -139,6 +132,9 @@ function App() {
                   <LoginForm user={user} onLogin={handleLogin} onLogout={handleLogout} roleMode={roleMode} />
                 </div>
               )}
+              {activeTab === 'dashboard' && roleMode === 'technician' && (
+                <TechnicianDashboard token={localStorage.getItem('akshar_token')} />
+              )}
             </div>
           )}
         </div>
@@ -149,8 +145,6 @@ function App() {
         user={user} 
         activeTab={activeTab} 
         setActiveTab={setActiveTab}
-        theme={theme}
-        setTheme={setTheme}
       />
     </>
   );

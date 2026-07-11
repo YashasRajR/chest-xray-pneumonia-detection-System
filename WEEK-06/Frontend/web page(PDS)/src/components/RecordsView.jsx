@@ -1,62 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, ShieldAlert, CheckCircle, Trash2, Search, Plus, FileText } from 'lucide-react';
+import { Activity, ShieldAlert, CheckCircle, Trash2, Search, Plus, FileText, Download } from 'lucide-react';
+import html2pdf from 'html2pdf.js';
+
+import { getHistory, deleteHistoryRecord, clearHistory, predictImage } from '../services/api';
 
 const defaultMockRecords = [
-  {
-    id: 'REC-XP928',
-    patientId: 'PAT-8402',
-    name: 'patient_study_0842.png',
-    size: '1.42 MB',
-    date: '2026-06-27, 10:14:02 AM',
-    result: 'normal',
-    confidence: '98.1%',
-    model: 'DenseNet-121',
-    processingTime: '1.8s'
-  },
-  {
-    id: 'REC-XP817',
-    patientId: 'PAT-3392',
-    name: 'cxr_opacity_consolidation.jpg',
-    size: '2.18 MB',
-    date: '2026-06-27, 11:22:45 AM',
-    result: 'pneumonia',
-    confidence: '92.4%',
-    model: 'DenseNet-121',
-    processingTime: '2.1s'
-  },
-  {
-    id: 'REC-XP602',
-    patientId: 'PAT-4109',
-    name: 'chest_xray_pediatric_normal.png',
-    size: '0.95 MB',
-    date: '2026-06-27, 02:40:11 PM',
-    result: 'normal',
-    confidence: '99.3%',
-    model: 'DenseNet-121',
-    processingTime: '1.4s'
-  },
-  {
-    id: 'REC-XP384',
-    patientId: 'PAT-5829',
-    name: 'radiograph_left_infiltrations.jpg',
-    size: '1.87 MB',
-    date: '2026-06-27, 03:05:54 PM',
-    result: 'pneumonia',
-    confidence: '91.8%',
-    model: 'DenseNet-121',
-    processingTime: '2.0s'
-  },
-  {
-    id: 'REC-XP119',
-    patientId: 'PAT-9021',
-    name: 'patient_study_9901_clear.png',
-    size: '1.63 MB',
-    date: '2026-06-27, 04:50:33 PM',
-    result: 'normal',
-    confidence: '98.7%',
-    model: 'DenseNet-121',
-    processingTime: '1.6s'
-  }
+  // ... omitting mock records since we are using db
 ];
 
 export default function RecordsView() {
@@ -64,75 +13,40 @@ export default function RecordsView() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeReport, setActiveReport] = useState(null);
 
-  // Load records from localStorage on mount
+  // Load records from database on mount
   useEffect(() => {
-    const loadRecords = () => {
-      const storedHistory = localStorage.getItem('akshar_upload_history');
-      if (storedHistory) {
-        try {
-          setRecords(JSON.parse(storedHistory));
-        } catch (e) {
-          console.error("Error loading scan logs:", e);
-        }
-      } else {
-        // Pre-populate with default clinical records
-        localStorage.setItem('akshar_upload_history', JSON.stringify(defaultMockRecords));
-        setRecords(defaultMockRecords);
+    const loadRecords = async () => {
+      try {
+        const history = await getHistory();
+        setRecords(history);
+      } catch (e) {
+        console.error("Error loading scan logs:", e);
       }
     };
     loadRecords();
-    
-    // Add window listener to sync local storage changes
-    window.addEventListener('storage', loadRecords);
-    return () => window.removeEventListener('storage', loadRecords);
   }, []);
 
-  const deleteRecord = (id) => {
-    const updated = records.filter(r => r.id !== id);
-    setRecords(updated);
-    localStorage.setItem('akshar_upload_history', JSON.stringify(updated));
-  };
-
-  const clearAllRecords = () => {
-    if (window.confirm("Are you sure you want to clear all clinical radiography records from the active session?")) {
-      setRecords([]);
-      localStorage.removeItem('akshar_upload_history');
+  const deleteRecord = async (id) => {
+    try {
+      await deleteHistoryRecord(id);
+      const updated = records.filter(r => r.id !== id);
+      setRecords(updated);
+    } catch (err) {
+      console.error("Error deleting record");
     }
   };
 
-  const generateMockRecord = () => {
-    const fileNames = [
-      'patient_study_2041.png',
-      'chest_xray_posture_ap.jpg',
-      'cxr_segmentation_test.png',
-      'radiograph_right_consolidation.jpg',
-      'pediatric_chest_healthy.png',
-      'clinical_imaging_scan_09.png'
-    ];
-    const outcomes = ['normal', 'pneumonia'];
-    const randomName = fileNames[Math.floor(Math.random() * fileNames.length)];
-    const randomNameModified = randomName
-      .replace('.png', `_${Math.floor(100 + Math.random() * 900)}.png`)
-      .replace('.jpg', `_${Math.floor(100 + Math.random() * 900)}.jpg`);
-    const randomOutcome = outcomes[Math.floor(Math.random() * outcomes.length)];
-    const randomSize = (1.0 + Math.random() * 1.5).toFixed(2) + ' MB';
-    
-    const newRecord = {
-      id: 'REC-XP' + Math.floor(1000 + Math.random() * 9000),
-      patientId: 'PAT-' + Math.floor(1000 + Math.random() * 9000),
-      name: randomNameModified,
-      size: randomSize,
-      date: new Date().toLocaleString(),
-      result: randomOutcome,
-      confidence: randomOutcome === 'pneumonia' ? '92.4%' : '98.1%',
-      model: 'DenseNet-121',
-      processingTime: (1.2 + Math.random() * 1.0).toFixed(1) + 's'
-    };
-    
-    const updated = [newRecord, ...records];
-    setRecords(updated);
-    localStorage.setItem('akshar_upload_history', JSON.stringify(updated));
+  const clearAllRecords = async () => {
+    if (window.confirm("Are you sure you want to clear all clinical radiography records from the active session?")) {
+      try {
+        await clearHistory();
+        setRecords([]);
+      } catch (err) {
+        console.error("Error clearing records");
+      }
+    }
   };
+
 
   // Filter records based on search query
   const filteredRecords = records.filter(r => 
@@ -145,6 +59,25 @@ export default function RecordsView() {
   const totalScans = records.length;
   const pneumoniaCount = records.filter(r => r.result === 'pneumonia').length;
   const normalCount = records.filter(r => r.result === 'normal').length;
+
+  const downloadPDF = () => {
+    const element = document.getElementById('report-content');
+    const actionButtons = document.getElementById('report-actions');
+    
+    if (actionButtons) actionButtons.style.display = 'none';
+
+    const opt = {
+      margin:       10,
+      filename:     `clinical_report_${activeReport?.patientId || 'record'}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2, useCORS: true },
+      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+
+    html2pdf().set(opt).from(element).save().then(() => {
+      if (actionButtons) actionButtons.style.display = 'flex';
+    });
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', textAlign: 'left' }}>
@@ -216,21 +149,7 @@ export default function RecordsView() {
 
         {/* Global Controls */}
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button
-            onClick={generateMockRecord}
-            className="btn-primary"
-            style={{ 
-              padding: '8px 16px', 
-              fontSize: '0.8rem', 
-              cursor: 'pointer',
-              height: '40px',
-              fontWeight: '700'
-            }}
-          >
-            <Plus size={14} />
-            Generate Mock Scan
-          </button>
-          
+
           {records.length > 0 && (
             <button
               onClick={clearAllRecords}
@@ -265,15 +184,15 @@ export default function RecordsView() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left', wordBreak: 'break-word' }}>
               <thead>
                 <tr style={{ borderBottom: '2px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: '700' }}>
-                  <th style={{ padding: '12px' }}>File Name</th>
-                  <th style={{ padding: '12px' }}>Patient ID</th>
-                  <th style={{ padding: '12px' }}>Scan Date</th>
-                  <th style={{ padding: '12px' }}>AI Result</th>
-                  <th style={{ padding: '12px' }}>Confidence</th>
-                  <th style={{ padding: '12px' }}>Model</th>
-                  <th style={{ padding: '12px' }}>Processing Time</th>
-                  <th style={{ padding: '12px', textAlign: 'center' }}>Report</th>
-                  <th style={{ padding: '12px', textAlign: 'right' }}>Actions</th>
+                  <th style={{ padding: '12px', whiteSpace: 'nowrap' }}>File Name</th>
+                  <th style={{ padding: '12px', whiteSpace: 'nowrap' }}>Patient ID</th>
+                  <th style={{ padding: '12px', whiteSpace: 'nowrap' }}>Scan Date</th>
+                  <th style={{ padding: '12px', whiteSpace: 'nowrap' }}>AI Result</th>
+                  <th style={{ padding: '12px', whiteSpace: 'nowrap' }}>Confidence</th>
+                  <th style={{ padding: '12px', whiteSpace: 'nowrap' }}>Model</th>
+                  <th style={{ padding: '12px', whiteSpace: 'nowrap' }}>Processing Time</th>
+                  <th style={{ padding: '12px', textAlign: 'center', whiteSpace: 'nowrap' }}>Report</th>
+                  <th style={{ padding: '12px', textAlign: 'right', whiteSpace: 'nowrap' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -287,7 +206,29 @@ export default function RecordsView() {
                     onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(2, 195, 154, 0.02)'}
                     onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                   >
-                    <td style={{ padding: '12px', fontWeight: '600', color: 'var(--text-primary)' }}>{item.name}</td>
+                    <td 
+                      style={{ 
+                        padding: '12px', 
+                        fontWeight: '600', 
+                        color: 'var(--accent-teal)',
+                        cursor: 'pointer',
+                        textDecoration: 'underline',
+                        maxWidth: '120px',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                      }}
+                      onClick={() => {
+                        if (item.imagePath) {
+                          window.open(`http://127.0.0.1:5000/uploads/${item.imagePath}`, '_blank');
+                        } else {
+                          alert('Original image not available for this legacy record.');
+                        }
+                      }}
+                      title={item.imagePath ? `Open ${item.name} X-Ray Image` : `Image not available`}
+                    >
+                      {item.name}
+                    </td>
                     <td style={{ padding: '12px', fontFamily: 'var(--font-mono)' }}>{item.patientId || 'PAT-3012'}</td>
                     <td style={{ padding: '12px', color: 'var(--text-secondary)' }}>{item.date}</td>
                     <td style={{ padding: '12px' }}>
@@ -305,7 +246,7 @@ export default function RecordsView() {
                       </span>
                     </td>
                     <td style={{ padding: '12px', fontWeight: '700' }}>{item.confidence || (item.result === 'pneumonia' ? '92.4%' : '98.1%')}</td>
-                    <td style={{ padding: '12px', color: 'var(--text-muted)' }}>{item.model || 'DenseNet-121'}</td>
+                    <td style={{ padding: '12px', color: 'var(--text-muted)' }}>{item.model || 'MobileNetV2'}</td>
                     <td style={{ padding: '12px', color: 'var(--text-muted)' }}>{item.processingTime || '1.7s'}</td>
                     <td style={{ padding: '12px', textAlign: 'center' }}>
                       <button
@@ -352,53 +293,110 @@ export default function RecordsView() {
         )}
       </div>
 
-      {/* Interactive PDF Clinical Report Sheet Modal */}
+      {/* Professional Clinical Report Modal */}
       {activeReport && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(6px)', padding: '16px' }}>
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '520px', background: 'var(--bg-secondary)', padding: '24px', position: 'relative', textAlign: 'left', border: '1px solid var(--border-color)', boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <Activity className="text-teal animate-pulse-glow" size={24} />
-              Clinical Radiology Report
-            </h3>
+        <div className="print-modal-wrapper" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', backdropFilter: 'blur(6px)', padding: '20px 16px', overflowY: 'auto' }}>
+          <div id="report-content" className="print-report" style={{ width: '700px', background: '#ffffff', color: '#000000', padding: '40px', position: 'relative', textAlign: 'left', borderRadius: '4px', boxShadow: '0 20px 60px rgba(0,0,0,0.4)', display: 'flex', flexDirection: 'column', margin: 'auto' }}>
             
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.84rem', borderTop: '1px solid var(--border-color)', borderBottom: '1px solid var(--border-color)', padding: '20px 0', margin: '16px 0', color: 'var(--text-primary)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Patient ID:</span>
-                <span style={{ fontWeight: 'bold', fontFamily: 'var(--font-mono)' }}>{activeReport.patientId || 'PAT-3012'}</span>
+            {/* Header / Letterhead */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '3px solid #000000', paddingBottom: '15px', marginBottom: '20px' }}>
+              <div>
+                <h1 style={{ margin: 0, fontSize: '2.2rem', fontWeight: 900, letterSpacing: '1px', color: '#000000', WebkitTextFillColor: '#000000', background: 'none' }}>AKSHAR AI</h1>
+                <h3 style={{ margin: '5px 0 0 0', fontSize: '1rem', color: '#444444', fontWeight: 600, letterSpacing: '3px', textTransform: 'uppercase', WebkitTextFillColor: '#444444', background: 'none' }}>Radiology Diagnostics</h3>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Radiography File:</span>
-                <span style={{ fontWeight: 'bold' }}>{activeReport.name}</span>
+              <div style={{ textAlign: 'right', color: '#000000' }}>
+                <h2 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 800, textTransform: 'uppercase', color: '#000000', WebkitTextFillColor: '#000000', background: 'none' }}>Clinical Report</h2>
+                <p style={{ margin: '8px 0 0 0', fontSize: '0.95rem', fontWeight: 600 }}>Date: {new Date(activeReport.date).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}</p>
+                <p style={{ margin: '5px 0 0 0', fontSize: '0.95rem' }}>Report ID: {activeReport.id || 'REP-NEW'}</p>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Scan Date & Time:</span>
-                <span>{activeReport.date}</span>
+            </div>
+
+            {/* Patient Information Box */}
+            <div style={{ border: '2px solid #dddddd', padding: '12px 15px', marginBottom: '20px', background: '#fcfcfc', borderRadius: '4px' }}>
+              <table style={{ width: '100%', fontSize: '0.9rem', color: '#000000' }}>
+                <tbody>
+                  <tr>
+                    <td style={{ padding: '6px 0', width: '20%', fontWeight: 700 }}>Patient ID:</td>
+                    <td style={{ padding: '6px 0', width: '30%', fontFamily: 'monospace', fontWeight: 600 }}>{activeReport.patientId || 'PAT-3012'}</td>
+                    <td style={{ padding: '6px 0', width: '20%', fontWeight: 700 }}>Study Type:</td>
+                    <td style={{ padding: '6px 0', width: '30%' }}>Chest Radiograph (PA View)</td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: '6px 0', fontWeight: 700 }}>Name:</td>
+                    <td style={{ padding: '6px 0' }}>{activeReport.name}</td>
+                    <td style={{ padding: '6px 0', fontWeight: 700 }}>Scan Date:</td>
+                    <td style={{ padding: '6px 0' }}>{new Date(activeReport.date).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Clinical Findings */}
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, borderBottom: '1px solid #eeeeee', paddingBottom: '5px', marginBottom: '15px', textTransform: 'uppercase', color: '#000000', WebkitTextFillColor: '#000000', background: 'none' }}>Diagnostic Findings</h3>
+            
+            <div style={{ display: 'flex', gap: '30px', marginBottom: '25px' }}>
+              <div style={{ flex: 1, fontSize: '0.9rem', lineHeight: 1.5, color: '#000000' }}>
+                <p style={{ margin: '0 0 10px 0' }}><strong>Indication:</strong> Evaluation for pulmonary infiltrates or opacities suggestive of pneumonia.</p>
+                <p style={{ margin: '0 0 10px 0' }}><strong>Methodology:</strong> The provided chest radiograph was analyzed using the Akshar AI {activeReport.model || 'MobileNetV2'} Deep Learning Architecture.</p>
+                
+                <div style={{ background: '#f5f5f5', padding: '15px 20px', borderLeft: `5px solid ${activeReport.result === 'pneumonia' || activeReport.result === 'PNEUMONIA' ? '#d32f2f' : '#2e7d32'}`, marginTop: '20px' }}>
+                  <p style={{ margin: '0 0 10px 0', fontSize: '1.05rem' }}>
+                    <strong>AI Conclusion: </strong> 
+                    <span style={{ color: activeReport.result === 'pneumonia' || activeReport.result === 'PNEUMONIA' ? '#d32f2f' : '#2e7d32', fontWeight: 800, textTransform: 'uppercase' }}>
+                      {activeReport.result === 'pneumonia' || activeReport.result === 'PNEUMONIA' ? 'Pneumonia Detected' : 'Normal / Healthy'}
+                    </span>
+                  </p>
+                  <p style={{ margin: 0 }}>
+                    <strong>Confidence Score: </strong> {activeReport.confidence}
+                  </p>
+                  {activeReport.rawScore && (
+                    <p style={{ margin: '5px 0 0 0' }}>
+                      <strong>Raw AI Score: </strong> {activeReport.rawScore}
+                    </p>
+                  )}
+                </div>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>AI Diagnostic Class:</span>
-                <span style={{ color: activeReport.result === 'pneumonia' ? 'var(--accent-danger)' : 'var(--accent-teal)', fontWeight: 'bold' }}>
-                  {activeReport.result === 'pneumonia' ? 'Pneumonia Detected' : 'Normal / Healthy'}
-                </span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Confidence Metric:</span>
-                <span style={{ fontWeight: 'bold' }}>{activeReport.confidence || (activeReport.result === 'pneumonia' ? '92.4%' : '98.1%')}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>CNN Model Architecture:</span>
-                <span>{activeReport.model || 'DenseNet-121'}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Processing Duration:</span>
-                <span>{activeReport.processingTime || '1.7s'}</span>
+              
+              {/* Image constrained to fit well in the report */}
+              {activeReport.imagePath && (
+                <div style={{ width: '220px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <img 
+                    src={activeReport.imagePath.startsWith('blob:') ? activeReport.imagePath : `http://127.0.0.1:5000/uploads/${activeReport.imagePath}`} 
+                    alt="Radiograph" 
+                    style={{ width: '100%', maxHeight: '200px', objectFit: 'contain', border: '1px solid #cccccc', marginBottom: '5px', background: '#000000' }} 
+                  />
+                  <span style={{ fontSize: '0.7rem', color: '#666666', fontWeight: 600 }}>Analyzed Radiograph</span>
+                </div>
+              )}
+            </div>
+
+            {/* Disclaimer & Signatures */}
+            <div style={{ marginTop: 'auto', fontSize: '0.8rem', color: '#666666' }}>
+              <p style={{ borderTop: '2px solid #eeeeee', paddingTop: '10px', marginBottom: '30px' }}>
+                <em>Disclaimer: This report was generated by an artificial intelligence diagnostic assistant. It is intended to augment, not replace, professional medical judgement. Clinical correlation is recommended.</em>
+              </p>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 20px', color: '#000000' }}>
+                <div style={{ textAlign: 'center', width: '200px' }}>
+                  <div style={{ borderBottom: '1px solid #000000', height: '40px' }}></div>
+                  <p style={{ margin: '8px 0 0 0', fontWeight: 700 }}>AI System Architect</p>
+                </div>
+                <div style={{ textAlign: 'center', width: '200px' }}>
+                  <div style={{ borderBottom: '1px solid #000000', height: '40px' }}></div>
+                  <p style={{ margin: '8px 0 0 0', fontWeight: 700 }}>Attending Physician</p>
+                </div>
               </div>
             </div>
             
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button className="btn-secondary" onClick={() => window.print()} style={{ padding: '6px 14px', fontSize: '0.8rem' }}>
+            {/* Action Buttons (Hidden when printing) */}
+            <div id="report-actions" className="no-print" style={{ display: 'flex', justifyContent: 'flex-end', gap: '15px', marginTop: '30px', borderTop: '2px solid #eeeeee', paddingTop: '20px' }}>
+              <button className="btn-secondary" onClick={downloadPDF} style={{ padding: '10px 20px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.95rem' }}>
+                <Download size={18} /> Download PDF
+              </button>
+              <button className="btn-secondary" onClick={() => window.print()} style={{ padding: '10px 20px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.95rem' }}>
                 Print Report
               </button>
-              <button className="btn-primary" onClick={() => setActiveReport(null)} style={{ padding: '6px 16px', fontSize: '0.8rem' }}>
+              <button className="btn-primary" onClick={() => setActiveReport(null)} style={{ padding: '10px 24px', fontSize: '0.95rem' }}>
                 Close
               </button>
             </div>

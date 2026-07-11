@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, Calendar, Mail, Lock, ShieldCheck, Database, Key, Phone, Edit, Check, LogOut } from 'lucide-react';
+import { loginUser, registerUser, updateUser } from '../services/api';
 
 export default function LoginForm({ user, onLogin, onLogout, roleMode }) {
   const [formMode, setFormMode] = useState('signin'); // 'signin' or 'register'
@@ -18,11 +19,19 @@ export default function LoginForm({ user, onLogin, onLogout, roleMode }) {
     age: '',
     email: '',
     mobile: '',
+    nickname: '',
     password: '',
     confirmPassword: ''
   });
 
   const [errors, setErrors] = useState({});
+
+  // Forgot Password Flow States
+  const [resetStep, setResetStep] = useState(0); // 0: Hidden, 1: Email, 2: Nickname & New Password
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetNickname, setResetNickname] = useState('');
+  const [resetNewPassword, setResetNewPassword] = useState('');
+  const [resetErrors, setResetErrors] = useState({});
 
   // Sync edit form state when user updates
   useEffect(() => {
@@ -59,6 +68,9 @@ export default function LoginForm({ user, onLogin, onLogout, roleMode }) {
       if (!formData.name.trim()) {
         tempErrors.name = `${labelName} is required`;
       }
+      if (!formData.nickname.trim()) {
+        tempErrors.nickname = 'Nickname is required';
+      }
       if (!formData.age.trim()) {
         tempErrors.age = 'Age is required';
       } else if (isNaN(formData.age) || parseInt(formData.age) <= 0 || parseInt(formData.age) > 120) {
@@ -92,128 +104,67 @@ export default function LoginForm({ user, onLogin, onLogout, roleMode }) {
     return Object.keys(tempErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (validate()) {
       const isTech = roleMode === 'technician';
       
-      // Load saved users from localStorage or default to empty array
-      let registeredUsers = [];
       try {
-        const storedUsers = localStorage.getItem('akshar_users');
-        if (storedUsers) {
-          registeredUsers = JSON.parse(storedUsers);
-        }
-      } catch (err) {
-        console.error("Error reading registered users from localStorage:", err);
-      }
-
-      const emailLower = formData.email.toLowerCase().trim();
-
-      if (formMode === 'signin') {
-        // Find if user is in registered list
-        let matchedUser = registeredUsers.find(
-          u => u.email.toLowerCase().trim() === emailLower && u.isTechnician === isTech
-        );
-
-        // Fallbacks for default users
-        if (!matchedUser) {
-          if (emailLower === 'patient@akshar.ai' && !isTech) {
-            matchedUser = {
-              name: 'John Doe',
-              age: '28',
-              email: 'patient@akshar.ai',
-              mobile: '+91 98765 43210',
-              password: 'password', // Demo password
-              isTechnician: false
-            };
-          } else if (emailLower === 'operator@akshar.ai' && isTech) {
-            matchedUser = {
-              name: 'Dr. Sarah Jenkins',
-              age: '42',
-              email: 'operator@akshar.ai',
-              mobile: '+91 90123 45678',
-              password: 'password', // Demo password
-              isTechnician: true
-            };
-          }
-        }
-
-        if (matchedUser) {
-          // Check Password
-          if (matchedUser.password && matchedUser.password !== formData.password) {
-            setErrors({
-              password: 'Incorrect password'
-            });
-            return;
-          }
+        if (formMode === 'signin') {
+          // Call API to login
+          const data = await loginUser(formData.email, formData.password);
+          
+          localStorage.setItem('akshar_token', data.token);
 
           onLogin({
-            name: matchedUser.name,
-            age: matchedUser.age,
-            email: matchedUser.email,
-            mobile: matchedUser.mobile || '+91 98765 43210',
-            licenseKey: isTech 
+            name: data.user.name,
+            email: data.user.email,
+            id: data.user.id,
+            patientId: data.user.patient_id,
+            role: data.user.role === 'technician' ? 'Operator' : 'Patient',
+            licenseKey: data.user.role === 'technician' 
               ? `AK-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
-              : `PT-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
-            role: isTech 
-              ? (parseInt(matchedUser.age) > 35 ? 'Lead Clinical Radiologist' : 'Diagnostic Imaging Technician')
-              : 'Registered Patient'
+              : data.user.patient_id,
+            age: data.user.age,
+            mobile: data.user.mobile
           });
+
         } else {
-          setErrors({
-            email: 'Email not registered. Switch to Register or use operator@akshar.ai / patient@akshar.ai'
+          const regRes = await registerUser(
+            formData.name, 
+            formData.email, 
+            formData.password,
+            formData.nickname,
+            formData.age,
+            formData.mobile,
+            isTech ? 'technician' : 'patient'
+          );
+          
+          const data = await loginUser(formData.email, formData.password);
+          localStorage.setItem('akshar_token', data.token);
+
+          onLogin({
+            name: data.user.name,
+            email: data.user.email,
+            id: data.user.id,
+            patientId: data.user.patient_id || regRes.patient_id,
+            role: data.user.role === 'technician' ? 'Operator' : 'Patient',
+            licenseKey: data.user.role === 'technician' 
+              ? `AK-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
+              : (data.user.patient_id || regRes.patient_id),
+            age: data.user.age,
+            mobile: data.user.mobile
           });
         }
-      } else {
-        // Register mode: Check if user already exists
-        const exists = registeredUsers.some(
-          u => u.email.toLowerCase().trim() === emailLower && u.isTechnician === isTech
-        ) || (emailLower === 'patient@akshar.ai' && !isTech) 
-          || (emailLower === 'operator@akshar.ai' && isTech);
-
-        if (exists) {
-          setErrors({
-            email: 'Email is already registered. Please sign in.'
-          });
-          return;
-        }
-
-        // Register new user
-        const newUser = {
-          name: formData.name,
-          age: formData.age,
-          email: formData.email,
-          mobile: formData.mobile,
-          password: formData.password, // Save password
-          isTechnician: isTech
-        };
-
-        registeredUsers.push(newUser);
-        try {
-          localStorage.setItem('akshar_users', JSON.stringify(registeredUsers));
-        } catch (err) {
-          console.error("Error writing new user to localStorage:", err);
-        }
-
-        // Auto-login registered user
-        onLogin({
-          name: newUser.name,
-          age: newUser.age,
-          email: newUser.email,
-          mobile: newUser.mobile,
-          licenseKey: isTech 
-            ? `AK-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
-            : `PT-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
-          role: isTech 
-            ? (parseInt(newUser.age) > 35 ? 'Lead Clinical Radiologist' : 'Diagnostic Imaging Technician')
-            : 'Registered Patient'
+      } catch (err) {
+        setErrors({
+          email: err.message
         });
       }
     }
   };
 
-  const handleSaveEdit = (e) => {
+  const handleSaveEdit = async (e) => {
     e.preventDefault();
     const tempErrors = {};
     if (!editData.name.trim()) tempErrors.name = 'Full name is required';
@@ -241,66 +192,75 @@ export default function LoginForm({ user, onLogin, onLogout, roleMode }) {
       return;
     }
 
-    const updatedUser = {
-      ...user,
-      name: editData.name,
-      age: editData.age,
-      mobile: editData.mobile
-    };
-
-    // Update in local database
-    let registeredUsers = [];
     try {
-      const storedUsers = localStorage.getItem('akshar_users');
-      if (storedUsers) {
-        registeredUsers = JSON.parse(storedUsers);
-      }
-    } catch (err) {
-      console.error("Error reading users database:", err);
-    }
-
-    const isTech = roleMode === 'technician';
-    let userFound = false;
-
-    const updatedLocalUsers = registeredUsers.map(u => {
-      if (u.email.toLowerCase().trim() === user.email.toLowerCase().trim() && u.isTechnician === isTech) {
-        userFound = true;
-        const updated = {
-          ...u,
-          name: editData.name,
-          age: editData.age,
-          mobile: editData.mobile
-        };
-        // Update password if typed
-        if (editData.password) {
-          updated.password = editData.password;
-        }
-        return updated;
-      }
-      return u;
-    });
-
-    // If it was a default user not stored in database, add it
-    if (!userFound) {
-      const defaultUser = {
+      const result = await updateUser({
         name: editData.name,
         age: editData.age,
-        email: user.email,
         mobile: editData.mobile,
-        password: editData.password || 'password', // fallback to default
-        isTechnician: isTech
-      };
-      updatedLocalUsers.push(defaultUser);
+        password: editData.password
+      });
+
+      onLogin({
+        ...user,
+        name: result.user.name,
+        age: result.user.age,
+        mobile: result.user.mobile
+      });
+      setIsEditing(false);
+    } catch (err) {
+      setEditErrors({ api: err.message });
+    }
+  };
+
+  const handleForgotPassword = () => {
+    setResetStep(1);
+    setResetEmail(formData.email || '');
+    setResetErrors({});
+  };
+
+  const submitForgotPasswordStep1 = (e) => {
+    e.preventDefault();
+    if (!resetEmail.trim()) {
+      setResetErrors({ email: 'Email is required' });
+      return;
+    }
+    setResetErrors({});
+    setResetStep(2);
+  };
+
+  const submitForgotPasswordStep2 = async (e) => {
+    e.preventDefault();
+    const tempErrors = {};
+    if (!resetNickname.trim()) tempErrors.nickname = 'Nickname is required';
+    if (!resetNewPassword.trim()) tempErrors.newPassword = 'New password is required';
+    if (Object.keys(tempErrors).length > 0) {
+      setResetErrors(tempErrors);
+      return;
     }
 
     try {
-      localStorage.setItem('akshar_users', JSON.stringify(updatedLocalUsers));
+      const { resetPasswordWithSecurityQuestion } = await import('../services/api');
+      const res = await resetPasswordWithSecurityQuestion(resetEmail, resetNickname, resetNewPassword);
+      alert(res.message);
+      setResetStep(0);
+      setResetNickname('');
+      setResetNewPassword('');
     } catch (err) {
-      console.error("Error updating users database in localStorage:", err);
+      setResetErrors({ global: err.message });
     }
+  };
 
-    onLogin(updatedUser);
-    setIsEditing(false);
+  const handleDeleteAccount = async () => {
+    if (window.confirm("Are you sure you want to permanently delete your account? This action cannot be undone and will delete all your diagnostic records.")) {
+      try {
+        const { deleteAccount } = await import('../services/api');
+        await deleteAccount();
+        alert("Your account has been deleted.");
+        if (onLogout) onLogout();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
   };
 
   return (
@@ -465,10 +425,19 @@ export default function LoginForm({ user, onLogin, onLogout, roleMode }) {
               </div>
               <div className="user-badge-item" style={{ padding: '8px' }}>
                 <div className="label" style={{ fontSize: '0.65rem' }}>
-                  {roleMode === 'technician' ? 'License Key' : 'Medical ID'}
+                  {roleMode === 'technician' ? 'License Key' : 'Patient ID'}
                 </div>
-                <div className="value" style={{ fontFamily: 'var(--font-mono)', fontSize: '0.74rem', color: 'var(--accent-teal)' }}>
-                  {user.licenseKey}
+                <div className="value" style={{ fontFamily: 'var(--font-mono)', fontSize: '0.74rem', color: 'var(--accent-teal)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  {roleMode === 'technician' ? user.licenseKey : (user.patientId || user.licenseKey)}
+                  {roleMode !== 'technician' && (
+                    <button 
+                      onClick={() => navigator.clipboard.writeText(user.patientId || user.licenseKey)}
+                      title="Copy Patient ID"
+                      style={{ background: 'transparent', border: 'none', color: 'var(--accent-teal)', cursor: 'pointer', padding: 0, display: 'inline-flex' }}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -541,6 +510,28 @@ export default function LoginForm({ user, onLogin, onLogout, roleMode }) {
                   Sign Out
                 </button>
               )}
+            </div>
+
+            {/* Delete Account Row */}
+            <div style={{ marginTop: '8px' }}>
+              <button 
+                onClick={handleDeleteAccount}
+                className="btn-secondary" 
+                style={{ 
+                  width: '100%',
+                  justifyContent: 'center', 
+                  padding: '10px', 
+                  fontSize: '0.82rem', 
+                  color: 'white', 
+                  background: 'var(--accent-danger)',
+                  borderColor: 'var(--accent-danger)',
+                  cursor: 'pointer'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = '#e11d48'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'var(--accent-danger)'}
+              >
+                Delete Account
+              </button>
             </div>
           </div>
         )
@@ -675,7 +666,25 @@ export default function LoginForm({ user, onLogin, onLogout, roleMode }) {
                     </div>
                   </div>
 
-                  {/* Row 3: Set Password and Confirm Password */}
+                  {/* Row 3: Nickname for Recovery */}
+                  <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem' }}>Nickname (For Password Recovery)</label>
+                    <div className="input-icon-wrapper">
+                      <input 
+                        type="text" 
+                        name="nickname" 
+                        value={formData.nickname} 
+                        onChange={handleChange}
+                        className="form-input" 
+                        placeholder="What is your nick name?"
+                        style={{ borderColor: errors.nickname ? 'var(--accent-danger)' : '', color: 'black', fontWeight: 'bold' }}
+                      />
+                      <User size={13} />
+                    </div>
+                    {errors.nickname && <span style={{ fontSize: '0.62rem', color: 'var(--accent-danger)' }}>{errors.nickname}</span>}
+                  </div>
+
+                  {/* Row 4: Set Password and Confirm Password */}
                   <div className="fade-in" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                       <label className="form-label" style={{ fontSize: '0.75rem' }}>Set Password</label>
@@ -712,6 +721,83 @@ export default function LoginForm({ user, onLogin, onLogout, roleMode }) {
                     </div>
                   </div>
                 </>
+              ) : resetStep > 0 ? (
+                /* Password Recovery Flow */
+                <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ marginBottom: '8px' }}>
+                    <h3 style={{ fontSize: '1rem', color: 'var(--text-primary)', margin: '0 0 4px 0' }}>Password Recovery</h3>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>
+                      {resetStep === 1 ? "Enter your email to begin." : "Answer your security question."}
+                    </p>
+                  </div>
+
+                  {resetStep === 1 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                        <label className="form-label" style={{ fontSize: '0.75rem' }}>Email ID</label>
+                        <div className="input-icon-wrapper">
+                          <input 
+                            type="email" 
+                            value={resetEmail} 
+                            onChange={(e) => setResetEmail(e.target.value)}
+                            className="form-input" 
+                            placeholder="your@email.com"
+                            style={{ borderColor: resetErrors.email ? 'var(--accent-danger)' : '', color: 'black', fontWeight: 'bold' }}
+                          />
+                          <Mail size={13} />
+                        </div>
+                        {resetErrors.email && <span style={{ fontSize: '0.62rem', color: 'var(--accent-danger)' }}>{resetErrors.email}</span>}
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                        <button type="button" onClick={() => setResetStep(0)} className="btn-secondary" style={{ flex: 1, padding: '10px', fontSize: '0.82rem' }}>Cancel</button>
+                        <button type="button" onClick={submitForgotPasswordStep1} className="btn-primary" style={{ flex: 1, padding: '10px', fontSize: '0.82rem' }}>Next</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {resetStep === 2 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                        <label className="form-label" style={{ fontSize: '0.75rem' }}>Security Question: What is your nick name?</label>
+                        <div className="input-icon-wrapper">
+                          <input 
+                            type="text" 
+                            value={resetNickname} 
+                            onChange={(e) => setResetNickname(e.target.value)}
+                            className="form-input" 
+                            placeholder="Your nickname"
+                            style={{ borderColor: resetErrors.nickname ? 'var(--accent-danger)' : '', color: 'black', fontWeight: 'bold' }}
+                          />
+                          <User size={13} />
+                        </div>
+                        {resetErrors.nickname && <span style={{ fontSize: '0.62rem', color: 'var(--accent-danger)' }}>{resetErrors.nickname}</span>}
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                        <label className="form-label" style={{ fontSize: '0.75rem' }}>New Password</label>
+                        <div className="input-icon-wrapper">
+                          <input 
+                            type="password" 
+                            value={resetNewPassword} 
+                            onChange={(e) => setResetNewPassword(e.target.value)}
+                            className="form-input" 
+                            placeholder="••••••••"
+                            style={{ borderColor: resetErrors.newPassword ? 'var(--accent-danger)' : '', color: 'black', fontWeight: 'bold' }}
+                          />
+                          <Lock size={13} />
+                        </div>
+                        {resetErrors.newPassword && <span style={{ fontSize: '0.62rem', color: 'var(--accent-danger)' }}>{resetErrors.newPassword}</span>}
+                      </div>
+                      
+                      {resetErrors.global && <div style={{ fontSize: '0.75rem', color: 'var(--accent-danger)', textAlign: 'center', marginTop: '4px' }}>{resetErrors.global}</div>}
+
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                        <button type="button" onClick={() => setResetStep(1)} className="btn-secondary" style={{ flex: 1, padding: '10px', fontSize: '0.82rem' }}>Back</button>
+                        <button type="button" onClick={submitForgotPasswordStep2} className="btn-primary" style={{ flex: 1, padding: '10px', fontSize: '0.82rem' }}>Reset Password</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               ) : (
                 /* Sign In Fields (1 row grid) */
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
@@ -733,7 +819,15 @@ export default function LoginForm({ user, onLogin, onLogout, roleMode }) {
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                    <label className="form-label" style={{ fontSize: '0.75rem' }}>Password</label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label className="form-label" style={{ fontSize: '0.75rem' }}>Password</label>
+                      <span 
+                        onClick={handleForgotPassword}
+                        style={{ fontSize: '0.7rem', color: 'var(--accent-cyan)', cursor: 'pointer' }}
+                      >
+                        Forgot password?
+                      </span>
+                    </div>
                     <div className="input-icon-wrapper">
                       <input 
                         type="password" 
@@ -752,12 +846,14 @@ export default function LoginForm({ user, onLogin, onLogout, roleMode }) {
               )}
 
               {/* Action Submit Button */}
-              <button type="submit" className="btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '6px', padding: '10px', fontSize: '0.82rem' }}>
-                <Key size={13} />
-                {formMode === 'signin' 
-                  ? (roleMode === 'technician' ? 'Authenticate Terminal' : 'Sign In to Portal')
-                  : (roleMode === 'technician' ? 'Register Operator Account' : 'Register & Sign In')}
-              </button>
+              {resetStep === 0 && (
+                <button type="submit" className="btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '6px', padding: '10px', fontSize: '0.82rem' }}>
+                  <Key size={13} />
+                  {formMode === 'signin' 
+                    ? (roleMode === 'technician' ? 'Authenticate Terminal' : 'Sign In to Portal')
+                    : (roleMode === 'technician' ? 'Register Operator Account' : 'Register & Sign In')}
+                </button>
+              )}
             </form>
 
             {/* Inline Link Toggle Helper */}
@@ -779,8 +875,8 @@ export default function LoginForm({ user, onLogin, onLogout, roleMode }) {
             <ShieldCheck size={12} className="text-teal" />
             <span>
               {roleMode === 'technician' 
-                ? 'Encrypted Operator Connection • Audit Hash Logged'
-                : 'Encrypted Patient Connection • HIPAA Secure'}
+                ? 'Authorized Access Only • TLS 1.3 encryption enabled' 
+                : 'Secure Patient Connection • Encrypted Storage'}
             </span>
           </div>
 

@@ -1,18 +1,18 @@
 import React from 'react';
-import { ShieldAlert, Cpu, Heart, CheckCircle2, Award, BarChart2 } from 'lucide-react';
+import { ShieldAlert, Cpu, Heart, CheckCircle2, Award, Activity } from 'lucide-react';
 
 export default function About({ roleMode }) {
   const patientSolutions = [
-    { title: 'Patient Triage & Navigation', desc: 'AI-driven case prioritization.' },
-    { title: 'Clinical Documentation', desc: 'Automating administrative charts.' },
-    { title: 'Medication Management', desc: 'Intelligent prescription validation.' }
+    { title: 'Instant Pneumonia Detection', desc: 'Fast, automated preliminary screening.' },
+    { title: 'Secure Image Processing', desc: 'Your medical data remains private.' },
+    { title: 'Diagnostic Assistance', desc: 'Aiding medical professionals with AI insights.' }
   ];
 
   const techSpecs = [
-    { label: 'Ingestion Accuracy', value: '96.4%', color: 'var(--accent-cyan)' },
-    { label: 'Sensitivity (Recall)', value: '98.2%', color: 'var(--accent-teal)' },
-    { label: 'Clinical Specificity', value: '94.1%', color: 'var(--accent-purple)' },
-    { label: 'Weighted F1-Score', value: '97.3%', color: 'var(--accent-blue)' }
+    { label: 'Architecture', value: 'MobileNetV2', color: 'var(--accent-cyan)' },
+    { label: 'Target Condition', value: 'Pneumonia', color: 'var(--accent-teal)' },
+    { label: 'Input Modality', value: 'Chest X-Ray', color: 'var(--accent-purple)' },
+    { label: 'Analysis Speed', value: 'Real-time', color: 'var(--accent-blue)' }
   ];
 
   if (roleMode === 'technician') {
@@ -26,25 +26,25 @@ export default function About({ roleMode }) {
             Clinical AI Core
           </h2>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            Convolutional Neural Network Parameters & Segmentation Pipelines.
+            Deep Learning Framework & Inference Engine.
           </p>
         </div>
 
         {/* Neural core details */}
         <div>
           <h3 style={{ fontSize: '0.95rem', color: 'var(--text-primary)', marginBottom: '4px' }}>
-            Deep CNN Specifications
+            Model Specifications
           </h3>
           <p style={{ fontSize: '0.82rem', lineHeight: '1.4', color: 'var(--text-secondary)' }}>
-            Features a multi-stage ResNet50 framework fine-tuned on NIH ChestX-ray14 datasets. Incorporates Contrast Limited Adaptive Histogram Equalization (CLAHE) and U-Net boundaries.
+            Features a highly-efficient MobileNetV2 architecture trained specifically for detecting pneumonia infiltrates in pediatric and adult chest radiographs.
           </p>
         </div>
 
         {/* Model Metrics */}
         <div>
           <h3 style={{ fontSize: '0.95rem', color: 'var(--text-primary)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <BarChart2 size={14} className="text-teal" />
-            Calibration Performance
+            <Activity size={14} className="text-teal" />
+            System Parameters
           </h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
             {techSpecs.map((spec, i) => (
@@ -53,22 +53,6 @@ export default function About({ roleMode }) {
                 <div style={{ fontSize: '0.62rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '2px' }}>{spec.label}</div>
               </div>
             ))}
-          </div>
-        </div>
-
-        {/* Compliance */}
-        <div>
-          <h4 style={{ fontSize: '0.85rem', color: 'var(--text-primary)', marginBottom: '4px' }}>Standards & Hardware</h4>
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', color: 'var(--text-teal)' }}>
-              <CheckCircle2 size={12} /> CE Medical Standard
-            </span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', color: 'var(--accent-cyan)' }}>
-              <CheckCircle2 size={12} /> ISO 13485 Devices
-            </span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', color: 'var(--accent-purple)' }}>
-              <CheckCircle2 size={12} /> CUDA GPU Node
-            </span>
           </div>
         </div>
 
@@ -85,7 +69,7 @@ export default function About({ roleMode }) {
           }}
         >
           <ShieldAlert className="text-danger" size={16} style={{ flexShrink: 0 }} />
-          <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)', lineHeight: '1.3' }}>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', lineHeight: '1.3' }}>
             <strong style={{ color: 'var(--accent-danger)', display: 'block', marginBottom: '1px' }}>Clinical Warning</strong>
             System operates strictly as computer-aided screening support. Not a standalone pulmonology diagnostic node.
           </div>
@@ -117,7 +101,7 @@ export default function About({ roleMode }) {
           Our Mission
         </h3>
         <p style={{ fontSize: '0.82rem', lineHeight: '1.4', color: 'var(--text-secondary)' }}>
-          We empower healthcare providers by reducing administrative burdens, improving patient outcomes, and optimizing resources. Automating repetitive workflows allows clinicians to dedicate more time to active patient care.
+          We aim to empower healthcare providers and patients by offering an accessible, AI-powered tool for early pneumonia detection from chest X-rays. 
         </p>
       </div>
 
@@ -137,21 +121,7 @@ export default function About({ roleMode }) {
         </div>
       </div>
 
-      {/* Compliance & Trust */}
-      <div>
-        <h4 style={{ fontSize: '0.85rem', color: 'var(--text-primary)', marginBottom: '4px' }}>Compliance Standards</h4>
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', color: 'var(--accent-teal)' }}>
-            <CheckCircle2 size={12} /> HIPAA Secure
-          </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', color: 'var(--accent-cyan)' }}>
-            <CheckCircle2 size={12} /> GDPR Compliant
-          </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', color: 'var(--accent-purple)' }}>
-            <CheckCircle2 size={12} /> NHS Compliant
-          </span>
-        </div>
-      </div>
+
 
       {/* Regulatory Alert */}
       <div 
@@ -166,7 +136,7 @@ export default function About({ roleMode }) {
         }}
       >
         <ShieldAlert className="text-warning" size={16} style={{ flexShrink: 0 }} />
-        <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)', lineHeight: '1.3' }}>
+        <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', lineHeight: '1.3' }}>
           <strong style={{ color: 'var(--accent-warning)', display: 'block', marginBottom: '1px' }}>Clinical Disclaimer</strong>
           System functions as auxiliary decision support. Findings must be validated by a licensed physician.
         </div>

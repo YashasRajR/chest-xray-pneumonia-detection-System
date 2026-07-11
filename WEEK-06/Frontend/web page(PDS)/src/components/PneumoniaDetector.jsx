@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Eye, EyeOff, CheckCircle, AlertTriangle, RefreshCw, Cpu, Activity, Plus, Trash2, FileText, Search } from 'lucide-react';
-import { predictImage } from '../services/api';
+import { Upload, Eye, EyeOff, CheckCircle, AlertTriangle, RefreshCw, Cpu, Activity, Plus, Trash2, FileText, Search, Download } from 'lucide-react';
+import html2pdf from 'html2pdf.js';
+import { predictImage, getHistory, deleteHistoryRecord, clearHistory } from '../services/api';
 
 // Symmetrical SVG Chest X-ray simulator
 const ChestXraySVG = ({ type, isScanning, showHeatmap }) => {
@@ -94,12 +95,16 @@ const ChestXraySVG = ({ type, isScanning, showHeatmap }) => {
   );
 };
 
-export default function PneumoniaDetector() {
-  // Application state: 'idle' | 'ready' | 'processing' | 'result' | 'error'
+export default function PneumoniaDetector({ roleMode }) {
+  // Application state: 'idle' | 'ready' | 'processing' | 'result' | 'error' | 'batch-ready' | 'batch-processing' | 'batch-result'
   const [appState, setAppState] = useState('idle');
   
   const [uploadedFile, setUploadedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
+  
+  // Batch processing states
+  const [batchFiles, setBatchFiles] = useState([]);
+  const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0, results: [] });
   const [processingStep, setProcessingStep] = useState(0);
   const [resultData, setResultData] = useState({ prediction: null, confidence: null, rawScore: null, errorMsg: null });
   
@@ -120,16 +125,13 @@ export default function PneumoniaDetector() {
     "Completed"
   ];
 
-  // Load upload logs registry from localStorage
+  // Load upload logs registry from Database
   useEffect(() => {
-    const storedHistory = localStorage.getItem('akshar_upload_history');
-    if (storedHistory) {
-      try {
-        setUploadHistory(JSON.parse(storedHistory));
-      } catch (err) {
-        console.error("Error parsing upload registry:", err);
-      }
-    }
+    const fetchHistory = async () => {
+      const records = await getHistory();
+      setUploadHistory(records);
+    };
+    fetchHistory();
   }, []);
 
   // Animate confidence bar when entering 'result' state
@@ -153,17 +155,31 @@ export default function PneumoniaDetector() {
 
   const handleFileUpload = (e) => {
     const files = Array.from(e.target.files);
-    if (files.length > 0) {
-      selectFile(files[0]);
-    }
+    processSelectedFiles(files);
   };
 
   const handleDrop = (e) => {
     e.preventDefault();
     setIsDragOver(false);
     const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0) {
-      selectFile(files[0]);
+    processSelectedFiles(files);
+  };
+
+  const processSelectedFiles = (files) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+    const validFiles = files.filter(f => allowedTypes.includes(f.type));
+    
+    if (validFiles.length === 0) {
+      setResultData({ prediction: null, confidence: null, rawScore: null, errorMsg: "Invalid File(s). Please upload a valid chest X-ray image (JPG/PNG)." });
+      setAppState('error');
+      return;
+    }
+
+    if (validFiles.length === 1) {
+      selectFile(validFiles[0]);
+    } else {
+      setBatchFiles(validFiles);
+      setAppState('batch-ready');
     }
   };
 
@@ -188,6 +204,27 @@ export default function PneumoniaDetector() {
     if (!uploadedFile) return;
     const apiPromise = predictImage(uploadedFile);
     simulateProcessingTimeline(apiPromise);
+  };
+
+  const executeBatchAnalysis = async () => {
+    setAppState('batch-processing');
+    setBatchProgress({ current: 0, total: batchFiles.length, results: [] });
+    let resultsArray = [];
+
+    for (let i = 0; i < batchFiles.length; i++) {
+      setBatchProgress(prev => ({ ...prev, current: i + 1 }));
+      try {
+        const result = await predictImage(batchFiles[i]);
+        if (result.db_record) {
+          setUploadHistory(prev => [result.db_record, ...prev]);
+        }
+        resultsArray.push({ file: batchFiles[i], result, status: 'success' });
+      } catch (err) {
+        resultsArray.push({ file: batchFiles[i], error: err.message, status: 'error' });
+      }
+    }
+    setBatchProgress(prev => ({ ...prev, results: resultsArray }));
+    setAppState('batch-result');
   };
 
   const simulateProcessingTimeline = async (apiPromise) => {
@@ -246,25 +283,12 @@ export default function PneumoniaDetector() {
       });
       setAppState('result');
       
-      // Log history
-      const newRecord = {
-        id: Math.random().toString(36).substr(2, 9).toUpperCase(),
-        patientId: 'PAT-' + Math.floor(1000 + Math.random() * 9000),
-        name: uploadedFile?.name || 'Uploaded File',
-        size: uploadedFile ? (uploadedFile.size / 1024 / 1024).toFixed(2) + ' MB' : 'Unknown',
-        date: new Date().toLocaleString(),
-        result: apiResult.prediction.toLowerCase(),
-        confidence: `${apiResult.confidence}%`,
-        rawScore: apiResult.raw_score,
-        model: 'MobileNetV2',
-        processingTime: '2.4s'
-      };
-
-      setUploadHistory(prev => {
-        const updated = [newRecord, ...prev];
-        localStorage.setItem('akshar_upload_history', JSON.stringify(updated));
-        return updated;
-      });
+      // Log history using the actual DB record returned by backend
+      if (apiResult.db_record) {
+        setUploadHistory(prev => {
+          return [apiResult.db_record, ...prev];
+        });
+      }
     }
   };
 
@@ -272,19 +296,40 @@ export default function PneumoniaDetector() {
     setAppState('idle');
     setUploadedFile(null);
     setPreviewUrl(null);
+    setBatchFiles([]);
+    setBatchProgress({ current: 0, total: 0, results: [] });
     setProcessingStep(0);
     setResultData({ prediction: null, confidence: null, rawScore: null, errorMsg: null });
+  };
+
+  const downloadPDF = () => {
+    const element = document.getElementById('report-content');
+    const actionButtons = document.getElementById('report-actions');
+    
+    if (actionButtons) actionButtons.style.display = 'none';
+
+    const opt = {
+      margin:       10,
+      filename:     `clinical_report_${activeReport?.patientId || 'new'}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2, useCORS: true },
+      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+
+    html2pdf().set(opt).from(element).save().then(() => {
+      if (actionButtons) actionButtons.style.display = 'flex';
+    });
   };
 
   return (
     <section className="section" id="detector">
       <div className="container">
-        <div style={{ textAlign: 'center', marginBottom: '48px' }}>
-          <h2 style={{ display: 'inline-flex', alignItems: 'center', gap: '12px' }}>
-            <Cpu className="text-cyan animate-pulse-glow" size={32} />
+        <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+          <h2 style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '1.75rem', margin: '0' }}>
+            <Cpu className="text-cyan animate-pulse-glow" size={28} />
             AI Chest X-Ray Analyzer
           </h2>
-          <p style={{ maxWidth: '640px', margin: '12px auto 0' }}>
+          <p style={{ maxWidth: '640px', margin: '8px auto 0', fontSize: '0.9rem' }}>
             Evaluate digital chest radiography in real time. Upload a radiography image to deploy the MobileNetV2 CNN for immediate classification.
           </p>
         </div>
@@ -300,6 +345,7 @@ export default function PneumoniaDetector() {
                   type="file" 
                   id="xray-upload" 
                   accept="image/png, image/jpeg, image/jpg" 
+                  multiple={roleMode === 'technician'}
                   onChange={handleFileUpload} 
                   style={{ display: 'none' }} 
                 />
@@ -327,13 +373,96 @@ export default function PneumoniaDetector() {
                     <div className="upload-icon-container" style={{ transform: isDragOver ? 'scale(1.15)' : 'scale(1)', transition: '0.2s' }}>
                       <Upload size={28} className={isDragOver ? 'text-teal animate-bounce' : ''} />
                     </div>
-                    <h3 style={{ fontSize: '1.25rem', marginTop: '8px' }}>
-                      {isDragOver ? 'Drop Radiography Here' : 'Upload Radiography Image'}
+                    <h3 style={{ fontSize: '1.25rem', marginTop: '8px', color: 'var(--text-primary)' }}>
+                      {isDragOver ? 'Drop X-Ray Here' : 'Select or drop your X-Ray here'}
                     </h3>
-                    <p style={{ fontSize: '0.85rem' }}>Drag & drop or select a file from local drive (PNG, JPG)</p>
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Drag & drop or select a file (PNG, JPG)</p>
                   </div>
                 </label>
               </div>
+            </div>
+          )}
+
+          {/* STATE: BATCH READY */}
+          {appState === 'batch-ready' && (
+            <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px', flex: 1 }}>
+              <h3 style={{ fontSize: '1.4rem', marginBottom: '24px' }}>Batch Ready ({batchFiles.length} files)</h3>
+              <div className="glass-panel" style={{ width: '100%', maxWidth: '600px', padding: '16px', maxHeight: '250px', overflowY: 'auto', marginBottom: '24px' }}>
+                {batchFiles.map((f, i) => (
+                  <div key={i} style={{ padding: '8px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>{f.name}</span>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{(f.size/1024/1024).toFixed(2)} MB</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: '16px' }}>
+                <button className="btn-primary" onClick={executeBatchAnalysis} style={{ padding: '12px 24px', fontSize: '1rem', display: 'flex', gap: '8px' }}>
+                  <Activity size={20} /> Analyze Batch
+                </button>
+                <button className="btn-secondary" onClick={resetDetector} style={{ padding: '12px 24px' }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STATE: BATCH PROCESSING */}
+          {appState === 'batch-processing' && (
+            <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px', flex: 1, justifyContent: 'center' }}>
+              <h3 style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', fontSize: '1.4rem', marginBottom: '16px' }}>
+                <RefreshCw className="animate-spin text-cyan" size={24} />
+                Processing Batch...
+              </h3>
+              <p style={{ marginBottom: '32px', color: 'var(--text-secondary)' }}>
+                Analyzing {batchProgress.current} of {batchProgress.total} images
+              </p>
+              
+              <div style={{ width: '100%', maxWidth: '500px', height: '12px', background: 'rgba(255,255,255,0.1)', borderRadius: '6px', overflow: 'hidden' }}>
+                <div style={{ 
+                  height: '100%', 
+                  background: 'var(--accent-teal)', 
+                  width: `${(batchProgress.current / batchProgress.total) * 100}%`,
+                  transition: 'width 0.3s ease'
+                }} />
+              </div>
+            </div>
+          )}
+
+          {/* STATE: BATCH RESULT */}
+          {appState === 'batch-result' && (
+            <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px', flex: 1 }}>
+              <h3 style={{ fontSize: '1.4rem', marginBottom: '24px', color: 'var(--accent-teal)' }}>Batch Analysis Complete</h3>
+              <div className="glass-panel" style={{ width: '100%', maxWidth: '800px', padding: '16px', maxHeight: '400px', overflowY: 'auto', marginBottom: '24px' }}>
+                <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
+                      <th style={{ padding: '12px' }}>File</th>
+                      <th style={{ padding: '12px' }}>Diagnosis</th>
+                      <th style={{ padding: '12px' }}>Confidence</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {batchProgress.results.map((r, i) => (
+                      <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                        <td style={{ padding: '12px' }}>{r.file.name}</td>
+                        {r.status === 'success' ? (
+                          <>
+                            <td style={{ padding: '12px', fontWeight: 'bold', color: r.result.prediction.toLowerCase() === 'pneumonia' ? 'var(--accent-danger)' : 'var(--accent-teal)' }}>
+                              {r.result.prediction}
+                            </td>
+                            <td style={{ padding: '12px' }}>{r.result.confidence}%</td>
+                          </>
+                        ) : (
+                          <td colSpan="2" style={{ padding: '12px', color: 'var(--accent-danger)' }}>Error: {r.error}</td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <button className="btn-primary" onClick={resetDetector} style={{ padding: '12px 24px' }}>
+                Analyze Another Batch
+              </button>
             </div>
           )}
 
@@ -355,7 +484,7 @@ export default function PneumoniaDetector() {
                   </div>
                   <button className="btn-primary" onClick={executeAnalysis} style={{ padding: '14px', fontSize: '1.1rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}>
                     <Activity size={20} />
-                    Analyze X-Ray
+                    Start Scan
                   </button>
                   <button className="btn-secondary" onClick={resetDetector} style={{ padding: '10px' }}>
                     Cancel
@@ -381,7 +510,11 @@ export default function PneumoniaDetector() {
                 </div>
 
                 {/* AI Analysis Timeline */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1, minWidth: '250px', justifyContent: 'center' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <h2 style={{ fontSize: '1.8rem', fontWeight: '800' }}>Upload Your X-Ray</h2>
+                  <p style={{ color: 'var(--text-secondary)' }}>
+                    Our AI system will securely analyze your chest X-ray for signs of pneumonia.
+                  </p>
                   {processingSteps.map((step, index) => {
                     const isCompleted = index < processingStep;
                     const isCurrent = index === processingStep;
@@ -431,7 +564,7 @@ export default function PneumoniaDetector() {
 
           {/* STATE: RESULT (Beautiful Result Card) */}
           {appState === 'result' && (
-            <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 0', flex: 1 }}>
+            <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '10px 0', flex: 1, width: '100%' }}>
               <div 
                 className="glass-panel" 
                 style={{ 
@@ -442,19 +575,28 @@ export default function PneumoniaDetector() {
                   borderRadius: '16px', 
                   overflow: 'hidden',
                   background: 'var(--bg-secondary)',
-                  border: `2px solid ${resultData.prediction?.toLowerCase() === 'pneumonia' ? 'rgba(244, 63, 94, 0.3)' : 'rgba(2, 195, 154, 0.3)'}`,
-                  boxShadow: `0 15px 35px ${resultData.prediction?.toLowerCase() === 'pneumonia' ? 'rgba(244, 63, 94, 0.15)' : 'rgba(2, 195, 154, 0.15)'}`,
+                  border: `2px solid ${resultData.prediction?.toLowerCase() === 'pneumonia' ? 'rgba(244, 63, 94, 0.4)' : 'rgba(2, 195, 154, 0.4)'}`,
+                  boxShadow: `0 10px 25px ${resultData.prediction?.toLowerCase() === 'pneumonia' ? 'rgba(244, 63, 94, 0.15)' : 'rgba(2, 195, 154, 0.15)'}`,
                 }}
               >
                 {/* Left: Image Preview */}
-                <div style={{ flex: '1 1 300px', background: '#020305', padding: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRight: '1px solid var(--border-color)' }}>
-                  <div style={{ position: 'relative', width: '100%', maxWidth: '300px', aspectRatio: '1', borderRadius: '8px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
-                    <img src={previewUrl} alt="Analyzed X-ray" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                <div style={{ 
+                  flex: '1 1 300px', 
+                  background: '#020305', 
+                  padding: '16px', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  borderRight: '1px solid var(--border-color)',
+                  position: 'relative'
+                }}>
+                  <div style={{ position: 'relative', width: '100%', maxWidth: '280px', aspectRatio: '1', borderRadius: '8px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <img src={previewUrl} alt="Analyzed X-ray" style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }} />
                     {/* Optional Heatmap Overlay for Pneumonia */}
                     {resultData.prediction?.toLowerCase() === 'pneumonia' && (
                        <div 
                          style={{
-                           position: 'absolute', width: '120px', height: '120px', borderRadius: '50%',
+                           position: 'absolute', width: '100px', height: '100px', borderRadius: '50%',
                            background: 'radial-gradient(circle, rgba(255,65,108,0.7) 0%, rgba(255,185,0,0.3) 50%, transparent 70%)',
                            top: '40%', left: '30%', mixBlendMode: 'screen', pointerEvents: 'none'
                          }}
@@ -464,70 +606,70 @@ export default function PneumoniaDetector() {
                 </div>
 
                 {/* Right: AI Prediction */}
-                <div style={{ flex: '1 1 350px', padding: '40px 32px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <div style={{ marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: '700' }}>
+                <div style={{ flex: '1 1 350px', padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                  <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: '700' }}>
                       AI Diagnosis
                     </span>
                     <span style={{ 
                       fontSize: '0.75rem', 
-                      padding: '4px 8px', 
-                      borderRadius: '12px',
+                      padding: '4px 10px', 
+                      borderRadius: '16px',
                       background: resultData.prediction?.toLowerCase() === 'pneumonia' ? 'rgba(244, 63, 94, 0.15)' : 'rgba(2, 195, 154, 0.15)',
                       color: resultData.prediction?.toLowerCase() === 'pneumonia' ? 'var(--accent-danger)' : 'var(--accent-teal)',
                       fontWeight: '700'
                     }}>
-                      {resultData.prediction?.toLowerCase() === 'pneumonia' ? 'Possible Pneumonia' : 'Healthy'}
+                      {resultData.prediction.toLowerCase() === 'pneumonia' ? 'Pneumonia Detected' : 'No Pneumonia Detected'}
                     </span>
                   </div>
                   
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
                     {resultData.prediction?.toLowerCase() === 'pneumonia' ? (
-                      <AlertTriangle className="text-danger animate-pulse-glow" size={42} />
+                      <AlertTriangle className="text-danger animate-pulse-glow" size={36} />
                     ) : (
-                      <CheckCircle className="text-teal animate-pulse-glow" size={42} />
+                      <CheckCircle className="text-teal animate-pulse-glow" size={36} />
                     )}
                     <h2 style={{ 
-                      fontSize: '2.4rem', 
+                      fontSize: '2rem', 
                       margin: 0, 
                       color: resultData.prediction?.toLowerCase() === 'pneumonia' ? 'var(--accent-danger)' : 'var(--accent-teal)',
-                      textShadow: `0 0 20px ${resultData.prediction?.toLowerCase() === 'pneumonia' ? 'rgba(244,63,94,0.4)' : 'rgba(2,195,154,0.4)'}`
+                      textShadow: `0 0 15px ${resultData.prediction?.toLowerCase() === 'pneumonia' ? 'rgba(244,63,94,0.4)' : 'rgba(2,195,154,0.4)'}`
                     }}>
                       {resultData.prediction === 'Pneumonia' || resultData.prediction === 'PNEUMONIA' ? 'PNEUMONIA' : 'NORMAL'}
                     </h2>
                   </div>
 
                   {/* AI Analysis Text */}
-                  <div style={{ padding: '16px', background: 'var(--bg-primary)', borderRadius: '8px', border: '1px solid var(--border-color)', marginBottom: '24px' }}>
-                    <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                  <div style={{ padding: '12px', background: 'var(--bg-primary)', borderRadius: '8px', border: '1px solid var(--border-color)', marginBottom: '20px' }}>
+                    <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
                       {resultData.prediction?.toLowerCase() === 'pneumonia' ? 
-                        "The uploaded chest X-ray contains radiographic features commonly associated with pneumonia. Clinical confirmation by a healthcare professional is recommended." : 
-                        "No significant radiographic patterns associated with pneumonia were detected. The uploaded chest X-ray appears normal based on the trained MobileNetV2 model."}
+                        "Radiographic features commonly associated with pneumonia detected. Clinical confirmation recommended." : 
+                        "No significant radiographic patterns associated with pneumonia were detected."}
                     </p>
                   </div>
 
-                  <div style={{ marginBottom: '32px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                      <span style={{ fontWeight: '600', fontSize: '1.05rem' }}>Confidence Meter</span>
-                      <span style={{ fontWeight: '800', fontSize: '1.05rem', color: 'var(--text-primary)' }}>{animatedConfidence.toFixed(2)}%</span>
+                  <div style={{ marginBottom: '20px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                      <span style={{ fontWeight: '600', fontSize: '0.9rem' }}>Confidence Meter</span>
+                      <span style={{ fontWeight: '800', fontSize: '0.9rem', color: 'var(--text-primary)' }}>{animatedConfidence.toFixed(2)}%</span>
                     </div>
-                    <div style={{ height: '10px', background: 'var(--border-color)', borderRadius: '5px', overflow: 'hidden' }}>
+                    <div style={{ height: '8px', background: 'var(--border-color)', borderRadius: '4px', overflow: 'hidden' }}>
                       <div style={{ 
                         width: `${animatedConfidence}%`, 
                         height: '100%', 
                         background: resultData.prediction?.toLowerCase() === 'pneumonia' ? 'linear-gradient(90deg, #ff416c, #ff4b2b)' : 'linear-gradient(90deg, #00b09b, #96c93d)',
-                        borderRadius: '5px',
+                        borderRadius: '4px',
                         transition: 'width 0.1s ease-out'
                       }}></div>
                     </div>
-                    <div style={{ marginTop: '8px', textAlign: 'right', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                      Raw AI Score: <span style={{ fontFamily: 'var(--font-mono)' }}>{resultData.rawScore}</span>
+                    <div style={{ marginTop: '6px', textAlign: 'right', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                      Raw Score: <span style={{ fontFamily: 'var(--font-mono)' }}>{resultData.rawScore}</span>
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '16px', marginTop: 'auto' }}>
-                    <button className="btn-primary" onClick={resetDetector} style={{ flex: 1, padding: '12px', fontSize: '1rem' }}>
-                      Analyze Another Image
+                  <div style={{ display: 'flex', gap: '12px', marginTop: 'auto' }}>
+                    <button className="btn-primary" onClick={resetDetector} style={{ flex: 1, padding: '10px', fontSize: '0.95rem' }}>
+                      Analyze Another
                     </button>
                   </div>
                 </div>
@@ -545,9 +687,13 @@ export default function PneumoniaDetector() {
                 </h3>
                 {uploadHistory.length > 0 && (
                   <button
-                    onClick={() => {
-                      setUploadHistory([]);
-                      localStorage.removeItem('akshar_upload_history');
+                    onClick={async () => {
+                      try {
+                        await clearHistory();
+                        setUploadHistory([]);
+                      } catch (err) {
+                        console.error("Failed to clear history");
+                      }
                     }}
                     className="btn-secondary"
                     style={{ padding: '4px 10px', fontSize: '0.78rem', color: 'var(--accent-danger)', borderColor: 'rgba(244, 63, 94, 0.15)', cursor: 'pointer' }}
@@ -568,14 +714,14 @@ export default function PneumoniaDetector() {
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left', wordBreak: 'break-word' }}>
                     <thead>
                       <tr style={{ borderBottom: '2px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: '700' }}>
-                        <th style={{ padding: '8px 12px' }}>File Name</th>
-                        <th style={{ padding: '8px 12px' }}>Patient ID</th>
-                        <th style={{ padding: '8px 12px' }}>Date & Time</th>
-                        <th style={{ padding: '8px 12px' }}>AI Result</th>
-                        <th style={{ padding: '8px 12px' }}>Confidence</th>
-                        <th style={{ padding: '8px 12px' }}>Raw Score</th>
-                        <th style={{ padding: '8px 12px', textAlign: 'center' }}>Report</th>
-                        <th style={{ padding: '8px 12px', textAlign: 'right' }}>Actions</th>
+                        <th style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>File Name</th>
+                        <th style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>Patient ID</th>
+                        <th style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>Date & Time</th>
+                        <th style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>AI Result</th>
+                        <th style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>Confidence</th>
+                        <th style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>Raw Score</th>
+                        <th style={{ padding: '8px 12px', textAlign: 'center', whiteSpace: 'nowrap' }}>Report</th>
+                        <th style={{ padding: '8px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -589,7 +735,29 @@ export default function PneumoniaDetector() {
                           onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(2, 195, 154, 0.02)'}
                           onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                         >
-                          <td style={{ padding: '10px 12px', fontWeight: '600', color: 'var(--text-primary)' }}>{item.name}</td>
+                          <td 
+                            style={{ 
+                              padding: '10px 12px', 
+                              fontWeight: '600', 
+                              color: 'var(--accent-teal)',
+                              cursor: 'pointer',
+                              textDecoration: 'underline',
+                              maxWidth: '120px',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}
+                            onClick={() => {
+                              if (item.imagePath) {
+                                window.open(`http://127.0.0.1:5000/uploads/${item.imagePath}`, '_blank');
+                              } else {
+                                alert('Original image not available for this legacy record.');
+                              }
+                            }}
+                            title={item.imagePath ? `Open ${item.name} X-Ray Image` : `Image not available`}
+                          >
+                            {item.name}
+                          </td>
                           <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)' }}>{item.patientId || 'PAT-2038'}</td>
                           <td style={{ padding: '10px 12px', color: 'var(--text-secondary)' }}>{item.date}</td>
                           <td style={{ padding: '10px 12px' }}>
@@ -628,10 +796,14 @@ export default function PneumoniaDetector() {
                           </td>
                           <td style={{ padding: '10px 12px', textAlign: 'right' }}>
                             <button
-                              onClick={() => {
-                                const updated = uploadHistory.filter(h => h.id !== item.id);
-                                setUploadHistory(updated);
-                                localStorage.setItem('akshar_upload_history', JSON.stringify(updated));
+                              onClick={async () => {
+                                try {
+                                  await deleteHistoryRecord(item.id);
+                                  const updated = uploadHistory.filter(h => h.id !== item.id);
+                                  setUploadHistory(updated);
+                                } catch (err) {
+                                  console.error("Failed to delete record");
+                                }
                               }}
                               style={{
                                 background: 'rgba(244, 63, 94, 0.1)',
@@ -661,59 +833,111 @@ export default function PneumoniaDetector() {
         </div>
       </div>
 
-      {/* Interactive PDF Clinical Report Sheet Modal */}
+      {/* Professional Clinical Report Modal */}
       {activeReport && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(6px)', padding: '16px' }}>
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '520px', background: 'var(--bg-secondary)', padding: '24px', position: 'relative', textAlign: 'left', border: '1px solid var(--border-color)', boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <Activity className="text-teal animate-pulse-glow" size={24} />
-              Clinical Radiology Report
-            </h3>
+        <div className="print-modal-wrapper" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', backdropFilter: 'blur(6px)', padding: '20px 16px', overflowY: 'auto' }}>
+          <div id="report-content" className="print-report" style={{ width: '700px', background: '#ffffff', color: '#000000', padding: '40px', position: 'relative', textAlign: 'left', borderRadius: '4px', boxShadow: '0 20px 60px rgba(0,0,0,0.4)', display: 'flex', flexDirection: 'column', margin: 'auto' }}>
             
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.84rem', borderTop: '1px solid var(--border-color)', borderBottom: '1px solid var(--border-color)', padding: '20px 0', margin: '16px 0', color: 'var(--text-primary)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Patient ID:</span>
-                <span style={{ fontWeight: 'bold', fontFamily: 'var(--font-mono)' }}>{activeReport.patientId || 'PAT-3012'}</span>
+            {/* Header / Letterhead */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '3px solid #000000', paddingBottom: '15px', marginBottom: '20px' }}>
+              <div>
+                <h1 style={{ margin: 0, fontSize: '2.2rem', fontWeight: 900, letterSpacing: '1px', color: '#000000', WebkitTextFillColor: '#000000', background: 'none' }}>AKSHAR AI</h1>
+                <h3 style={{ margin: '5px 0 0 0', fontSize: '1rem', color: '#444444', fontWeight: 600, letterSpacing: '3px', textTransform: 'uppercase', WebkitTextFillColor: '#444444', background: 'none' }}>Radiology Diagnostics</h3>
+                <p style={{ margin: '10px 0 0 0', fontSize: '0.85rem', color: '#666666' }}>123 Medical Plaza, Health District<br/>Tel: (555) 123-4567 | clinical@akshar.ai</p>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Radiography File:</span>
-                <span style={{ fontWeight: 'bold' }}>{activeReport.name}</span>
+              <div style={{ textAlign: 'right', color: '#000000' }}>
+                <h2 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 800, textTransform: 'uppercase', color: '#000000', WebkitTextFillColor: '#000000', background: 'none' }}>Clinical Report</h2>
+                <p style={{ margin: '8px 0 0 0', fontSize: '0.95rem', fontWeight: 600 }}>Date: {new Date(activeReport.date).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}</p>
+                <p style={{ margin: '5px 0 0 0', fontSize: '0.95rem' }}>Report ID: {activeReport.id || 'REP-NEW'}</p>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Scan Date & Time:</span>
-                <span>{activeReport.date}</span>
+            </div>
+
+            {/* Patient Information Box */}
+            <div style={{ border: '2px solid #dddddd', padding: '12px 15px', marginBottom: '20px', background: '#fcfcfc', borderRadius: '4px' }}>
+              <table style={{ width: '100%', fontSize: '0.9rem', color: '#000000' }}>
+                <tbody>
+                  <tr>
+                    <td style={{ padding: '4px 0', width: '20%', fontWeight: 700 }}>Patient ID:</td>
+                    <td style={{ padding: '4px 0', width: '30%', fontFamily: 'monospace', fontWeight: 600 }}>{activeReport.patientId || 'PAT-3012'}</td>
+                    <td style={{ padding: '6px 0', width: '20%', fontWeight: 700 }}>Study Type:</td>
+                    <td style={{ padding: '6px 0', width: '30%' }}>Chest Radiograph (PA View)</td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: '6px 0', fontWeight: 700 }}>Name:</td>
+                    <td style={{ padding: '6px 0' }}>{activeReport.name}</td>
+                    <td style={{ padding: '6px 0', fontWeight: 700 }}>Scan Date:</td>
+                    <td style={{ padding: '6px 0' }}>{new Date(activeReport.date).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Clinical Findings */}
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, borderBottom: '1px solid #eeeeee', paddingBottom: '5px', marginBottom: '15px', textTransform: 'uppercase', color: '#000000', WebkitTextFillColor: '#000000', background: 'none' }}>Diagnostic Findings</h3>
+            
+            <div style={{ display: 'flex', gap: '30px', marginBottom: '25px' }}>
+              <div style={{ flex: 1, fontSize: '0.9rem', lineHeight: 1.5, color: '#000000' }}>
+                <p style={{ margin: '0 0 10px 0' }}><strong>Indication:</strong> Evaluation for pulmonary infiltrates or opacities suggestive of pneumonia.</p>
+                <p style={{ margin: '0 0 10px 0' }}><strong>Methodology:</strong> The provided chest radiograph was analyzed using the Akshar AI {activeReport.model || 'MobileNetV2'} Deep Learning Architecture.</p>
+                
+                <div style={{ background: '#f5f5f5', padding: '15px 20px', borderLeft: `5px solid ${activeReport.result === 'pneumonia' || activeReport.result === 'PNEUMONIA' ? '#d32f2f' : '#2e7d32'}`, marginTop: '20px' }}>
+                  <p style={{ margin: '0 0 10px 0', fontSize: '1.05rem' }}>
+                    <strong>AI Conclusion: </strong> 
+                    <span style={{ color: activeReport.result === 'pneumonia' || activeReport.result === 'PNEUMONIA' ? '#d32f2f' : '#2e7d32', fontWeight: 800, textTransform: 'uppercase' }}>
+                      {activeReport.result === 'pneumonia' || activeReport.result === 'PNEUMONIA' ? 'Pneumonia Detected' : 'Normal / Healthy'}
+                    </span>
+                  </p>
+                  <p style={{ margin: 0 }}>
+                    <strong>Confidence Score: </strong> {activeReport.confidence}
+                  </p>
+                  {activeReport.rawScore && (
+                    <p style={{ margin: '5px 0 0 0' }}>
+                      <strong>Raw AI Score: </strong> {activeReport.rawScore}
+                    </p>
+                  )}
+                </div>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>AI Diagnostic Class:</span>
-                <span style={{ color: activeReport.result === 'pneumonia' || activeReport.result === 'PNEUMONIA' ? 'var(--accent-danger)' : 'var(--accent-teal)', fontWeight: 'bold' }}>
-                  {activeReport.result === 'pneumonia' || activeReport.result === 'PNEUMONIA' ? 'Pneumonia Detected' : 'Normal / Healthy'}
-                </span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Confidence Metric:</span>
-                <span style={{ fontWeight: 'bold' }}>{activeReport.confidence}</span>
-              </div>
-              {activeReport.rawScore && (
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Raw AI Score:</span>
-                  <span style={{ fontWeight: 'bold', fontFamily: 'var(--font-mono)' }}>{activeReport.rawScore}</span>
+              
+              {/* Image constrained to fit well in the report */}
+              {activeReport.imagePath && (
+                <div style={{ width: '220px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <img 
+                    src={activeReport.imagePath.startsWith('blob:') ? activeReport.imagePath : `http://127.0.0.1:5000/uploads/${activeReport.imagePath}`} 
+                    alt="Radiograph" 
+                    style={{ width: '100%', maxHeight: '200px', objectFit: 'contain', border: '1px solid #cccccc', marginBottom: '5px', background: '#000000' }} 
+                  />
+                  <span style={{ fontSize: '0.7rem', color: '#666666', fontWeight: 600 }}>Analyzed Radiograph</span>
                 </div>
               )}
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>CNN Model Architecture:</span>
-                <span>{activeReport.model || 'DenseNet-121'}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Processing Duration:</span>
-                <span>{activeReport.processingTime || '1.7s'}</span>
+            </div>
+
+            {/* Disclaimer & Signatures */}
+            <div style={{ marginTop: 'auto', fontSize: '0.8rem', color: '#666666' }}>
+              <p style={{ borderTop: '2px solid #eeeeee', paddingTop: '10px', marginBottom: '30px' }}>
+                <em>Disclaimer: This report was generated by an artificial intelligence diagnostic assistant. It is intended to augment, not replace, professional medical judgement. Clinical correlation is recommended.</em>
+              </p>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 20px', color: '#000000' }}>
+                <div style={{ textAlign: 'center', width: '200px' }}>
+                  <div style={{ borderBottom: '1px solid #000000', height: '40px' }}></div>
+                  <p style={{ margin: '8px 0 0 0', fontWeight: 700 }}>AI System Architect</p>
+                </div>
+                <div style={{ textAlign: 'center', width: '200px' }}>
+                  <div style={{ borderBottom: '1px solid #000000', height: '40px' }}></div>
+                  <p style={{ margin: '8px 0 0 0', fontWeight: 700 }}>Attending Physician</p>
+                </div>
               </div>
             </div>
             
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button className="btn-secondary" onClick={() => window.print()} style={{ padding: '6px 14px', fontSize: '0.8rem' }}>
+            {/* Action Buttons (Hidden when printing) */}
+            <div id="report-actions" className="no-print" style={{ display: 'flex', justifyContent: 'flex-end', gap: '15px', marginTop: '30px', borderTop: '2px solid #eeeeee', paddingTop: '20px' }}>
+              <button className="btn-secondary" onClick={downloadPDF} style={{ padding: '10px 20px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.95rem' }}>
+                <Download size={18} /> Download PDF
+              </button>
+              <button className="btn-secondary" onClick={() => window.print()} style={{ padding: '10px 20px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.95rem' }}>
                 Print Report
               </button>
-              <button className="btn-primary" onClick={() => setActiveReport(null)} style={{ padding: '6px 16px', fontSize: '0.8rem' }}>
+              <button className="btn-primary" onClick={() => setActiveReport(null)} style={{ padding: '10px 24px', fontSize: '0.95rem' }}>
                 Close
               </button>
             </div>
