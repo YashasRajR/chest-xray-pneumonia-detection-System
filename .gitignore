@@ -12,5 +12,40 @@ venv/
 __pycache__/
 *.pyc
 
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# React
+node_modules/
+dist/
+
+# VS Code
+.vscode/
+
+# Environment
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Uploads
+Backend/uploads/*
+
+# Python cache
+*.pyo
+*.pyd
+
 # Windows
 desktop.ini
+
+# WEEK-06 Pneumonia Detection System
+WEEK-06/Backend/uploads/
+WEEK-06/Backend/models/*.keras
+WEEK-06/Backend/models/*.h5
+WEEK-06/Dataset/
+WEEK-06/Notebooks/.ipynb_checkpoints/
+*.keras
+*.h5
