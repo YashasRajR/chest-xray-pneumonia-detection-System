@@ -352,7 +352,7 @@ def get_technician_analytics(current_user):
 
         # Get today's scans
         today_str = datetime.datetime.now().strftime("%Y-%m-%d")
-        today_scans = PredictionRecord.query.filter(PredictionRecord.date.like(f"{today_str}%")).count()
+        today_scans = PredictionRecord.query.filter(db.cast(PredictionRecord.date, db.String).like(f"{today_str}%")).count()
 
         return jsonify({
             'totalScans': total_scans,
