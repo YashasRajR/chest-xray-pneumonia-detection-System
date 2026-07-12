@@ -18,10 +18,10 @@ export default function TechnicianDashboard({ token }) {
     try {
       const actualToken = token || localStorage.getItem('akshar_token');
       const [analyticsRes, patientsRes] = await Promise.all([
-        fetch('http://127.0.0.1:5000/api/technician/analytics', {
+        fetch('/api/technician/analytics', {
           headers: { 'Authorization': `Bearer ${actualToken}` }
         }),
-        fetch('http://127.0.0.1:5000/api/technician/patients', {
+        fetch('/api/technician/patients', {
           headers: { 'Authorization': `Bearer ${actualToken}` }
         })
       ]);

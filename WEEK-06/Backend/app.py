@@ -5,7 +5,7 @@ import traceback
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from prediction import get_model, run_inference
-from database import db, PredictionRecord
+from database import db, PredictionRecord, Patient, Technician
 
 import jwt
 from functools import wraps
@@ -22,7 +22,10 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOADS_DIR = os.path.join(BASE_DIR, 'uploads')
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(BASE_DIR, 'database.db')
+database_url = os.getenv('DATABASE_URL', 'sqlite:///' + os.path.join(BASE_DIR, 'database.db'))
+if database_url.startswith("postgres://"):
+    database_url = database_url.replace("postgres://", "postgresql://", 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db.init_app(app)
@@ -50,67 +53,79 @@ def token_required(f):
             return jsonify({'error': 'Authentication token is missing!'}), 401
         try:
             data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
-            from database import User
-            current_user = User.query.filter_by(id=data['user_id']).first()
+            role = data.get('role', 'patient')
+            if role == 'technician':
+                current_user = Technician.query.filter_by(id=data['user_id']).first()
+            else:
+                current_user = Patient.query.filter_by(id=data['user_id']).first()
             if not current_user:
                 return jsonify({'error': 'User not found!'}), 401
+            current_user.role = role
+            if role == 'patient':
+                current_user.patient_id = current_user.patient_id
+            else:
+                current_user.patient_id = current_user.employee_id
         except Exception as e:
             return jsonify({'error': 'Token is invalid!'}), 401
         return f(current_user, *args, **kwargs)
     return decorated
 
 # --- AUTH ENDPOINTS ---
-from database import User
+from database import Patient, Technician
 
 @app.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
-    if not data or not data.get('email') or not data.get('password') or not data.get('name') or not data.get('nickname'):
-        return jsonify({'error': 'Missing required fields, including nickname.'}), 400
-    
-    if User.query.filter_by(email=data['email']).first():
-        return jsonify({'error': 'Email already exists'}), 400
+    if not data or not data.get('email') or not data.get('password') or not data.get('name'):
+        return jsonify({'error': 'Missing required fields'}), 400
         
-    hashed_password = bcrypt.generate_password_hash(data['password']).decode('utf-8')
+    role = data.get('role', 'patient')
     
-    from sqlalchemy.exc import IntegrityError
-    year = datetime.datetime.now().year
-    prefix = f"PNE-{year}-"
-    
-    max_retries = 3
-    for attempt in range(max_retries):
-        last_user = User.query.filter(User.patient_id.like(f"{prefix}%")).order_by(User.patient_id.desc()).first()
+    if role == 'technician':
+        if Technician.query.filter_by(email=data['email']).first():
+            return jsonify({'error': 'Email already registered'}), 400
+        
+        last_user = Technician.query.order_by(Technician.id.desc()).first()
+        last_seq = last_user.id if last_user else 0
+        new_id = f"EMP-{datetime.datetime.now().year}-{str(last_seq + 1).zfill(5)}"
+        
+        new_user = Technician(
+            employee_id=new_id,
+            name=data['name'],
+            email=data['email'],
+            password_hash=bcrypt.generate_password_hash(data['password']).decode('utf-8'),
+            nickname=data.get('nickname'),
+            mobile=data.get('mobile')
+        )
+        db.session.add(new_user)
+        db.session.commit()
+        return jsonify({'message': 'User created successfully', 'patient_id': new_id}), 201
+    else:
+        if Patient.query.filter_by(email=data['email']).first():
+            return jsonify({'error': 'Email already registered'}), 400
+            
+        prefix = f"PNE-{datetime.datetime.now().year}"
+        last_user = Patient.query.filter(Patient.patient_id.like(f"{prefix}%")).order_by(Patient.patient_id.desc()).first()
+        last_seq = 0
         if last_user and last_user.patient_id:
             try:
                 last_seq = int(last_user.patient_id.split('-')[2])
-                next_seq = last_seq + 1
-            except ValueError:
-                next_seq = 1
-        else:
-            next_seq = 1
-            
-        new_patient_id = f"{prefix}{next_seq:06d}"
-        new_user = User(
-            patient_id=new_patient_id, 
-            name=data['name'], 
-            email=data['email'], 
-            password_hash=hashed_password,
+            except:
+                pass
+        new_patient_id = f"{prefix}-{str(last_seq + 1).zfill(6)}"
+        
+        new_user = Patient(
+            patient_id=new_patient_id,
+            name=data['name'],
+            email=data['email'],
+            password_hash=bcrypt.generate_password_hash(data['password']).decode('utf-8'),
             nickname=data.get('nickname'),
             age=data.get('age'),
-            mobile=data.get('mobile'),
-            role=data.get('role', 'patient')
+            mobile=data.get('mobile')
         )
-        
         db.session.add(new_user)
-        try:
-            db.session.commit()
-            break
-        except IntegrityError:
-            db.session.rollback()
-            if attempt == max_retries - 1:
-                return jsonify({'error': 'Registration failed due to high concurrency. Please try again.'}), 500
-    
-    return jsonify({'message': 'User created successfully', 'patient_id': new_patient_id}), 201
+        db.session.commit()
+        return jsonify({'message': 'User created successfully', 'patient_id': new_patient_id}), 201
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -118,11 +133,16 @@ def login():
     if not data or not data.get('email') or not data.get('password'):
         return jsonify({'error': 'Missing credentials'}), 400
         
-    user = User.query.filter_by(email=data['email']).first()
-    
+    user = Patient.query.filter_by(email=data['email']).first()
+    role = 'patient'
+    if not user:
+        user = Technician.query.filter_by(email=data['email']).first()
+        role = 'technician'
+        
     if user and bcrypt.check_password_hash(user.password_hash, data['password']):
         token = jwt.encode({
             'user_id': user.id,
+            'role': role,
             'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
         }, app.config['SECRET_KEY'], algorithm="HS256")
         
@@ -132,9 +152,9 @@ def login():
                 'id': user.id, 
                 'name': user.name, 
                 'email': user.email, 
-                'patient_id': user.patient_id, 
-                'role': user.role,
-                'age': user.age,
+                'patient_id': user.employee_id if role == 'technician' else user.patient_id, 
+                'role': role,
+                'age': getattr(user, 'age', None),
                 'mobile': user.mobile
             }
         }), 200
@@ -355,7 +375,7 @@ def get_technician_patients(current_user):
         if current_user.role != 'technician':
             return jsonify({'error': 'Access denied: Technician role required'}), 403
             
-        users = User.query.filter_by(role='patient').all()
+        users = Patient.query.all()
         result = []
         for u in users:
             # Count scans for this user

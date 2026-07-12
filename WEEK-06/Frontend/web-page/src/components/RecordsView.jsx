@@ -295,8 +295,8 @@ export default function RecordsView() {
 
       {/* Professional Clinical Report Modal */}
       {activeReport && (
-        <div className="print-modal-wrapper" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', backdropFilter: 'blur(6px)', padding: '20px 16px', overflowY: 'auto' }}>
-          <div id="report-content" className="print-report" style={{ width: '700px', background: '#ffffff', color: '#000000', padding: '40px', position: 'relative', textAlign: 'left', borderRadius: '4px', boxShadow: '0 20px 60px rgba(0,0,0,0.4)', display: 'flex', flexDirection: 'column', margin: 'auto' }}>
+        <div className="print-modal-wrapper" onClick={() => setActiveReport(null)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', backdropFilter: 'blur(6px)', padding: '20px 16px', overflowY: 'auto', cursor: 'pointer' }}>
+          <div id="report-content" className="print-report" onClick={(e) => e.stopPropagation()} style={{ width: '700px', background: '#ffffff', color: '#000000', padding: '40px', position: 'relative', textAlign: 'left', borderRadius: '4px', boxShadow: '0 20px 60px rgba(0,0,0,0.4)', display: 'flex', flexDirection: 'column', margin: 'auto', cursor: 'default' }}>
             
             {/* Header / Letterhead */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '3px solid #000000', paddingBottom: '15px', marginBottom: '20px' }}>

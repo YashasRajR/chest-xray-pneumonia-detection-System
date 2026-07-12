@@ -3,8 +3,8 @@ from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
 
-class User(db.Model):
-    __tablename__ = 'users'
+class Patient(db.Model):
+    __tablename__ = 'patients'
     
     id = db.Column(db.Integer, primary_key=True)
     patient_id = db.Column(db.String(15), unique=True, nullable=False, index=True)
@@ -14,15 +14,28 @@ class User(db.Model):
     nickname = db.Column(db.String(50), nullable=True)
     age = db.Column(db.Integer, nullable=True)
     mobile = db.Column(db.String(15), nullable=True)
-    role = db.Column(db.String(20), default='patient', nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+class Technician(db.Model):
+    __tablename__ = 'technicians'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.String(15), unique=True, nullable=False, index=True)
+    name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    nickname = db.Column(db.String(50), nullable=True)
+    mobile = db.Column(db.String(15), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
 class PredictionRecord(db.Model):
-    __tablename__ = 'prediction_history'
+    __tablename__ = 'prediction_records'
 
     id = db.Column(db.String, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id = db.Column(db.Integer, nullable=False)
+    user_role = db.Column(db.String(20), default='patient', nullable=False)
     patient_id = db.Column(db.String, nullable=False)
     name = db.Column(db.String, nullable=False)
     image_path = db.Column(db.String(255), nullable=True)
