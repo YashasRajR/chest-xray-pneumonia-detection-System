@@ -112,7 +112,7 @@ export default function LoginForm({ user, onLogin, onLogout, roleMode }) {
       try {
         if (formMode === 'signin') {
           // Call API to login
-          const data = await loginUser(formData.email, formData.password);
+          const data = await loginUser(formData.email, formData.password, roleMode);
           
           localStorage.setItem('akshar_token', data.token);
 
@@ -140,7 +140,7 @@ export default function LoginForm({ user, onLogin, onLogout, roleMode }) {
             isTech ? 'technician' : 'patient'
           );
           
-          const data = await loginUser(formData.email, formData.password);
+          const data = await loginUser(formData.email, formData.password, roleMode);
           localStorage.setItem('akshar_token', data.token);
 
           onLogin({

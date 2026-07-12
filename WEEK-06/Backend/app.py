@@ -133,11 +133,26 @@ def login():
     if not data or not data.get('email') or not data.get('password'):
         return jsonify({'error': 'Missing credentials'}), 400
         
-    user = Patient.query.filter_by(email=data['email']).first()
-    role = 'patient'
-    if not user:
+    requested_role = data.get('role')
+    user = None
+    role = None
+    
+    if requested_role == 'technician':
         user = Technician.query.filter_by(email=data['email']).first()
         role = 'technician'
+    elif requested_role == 'patient':
+        user = Patient.query.filter_by(email=data['email']).first()
+        role = 'patient'
+    else:
+        # Fallback if no role provided
+        user = Patient.query.filter_by(email=data['email']).first()
+        role = 'patient'
+        if not user:
+            user = Technician.query.filter_by(email=data['email']).first()
+            role = 'technician'
+            
+    if not user:
+        return jsonify({'error': 'User not found in the selected role. Please register or switch roles.'}), 404
         
     if user and bcrypt.check_password_hash(user.password_hash, data['password']):
         token = jwt.encode({
