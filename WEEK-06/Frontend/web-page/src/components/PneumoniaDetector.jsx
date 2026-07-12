@@ -895,6 +895,7 @@ export default function PneumoniaDetector({ roleMode }) {
                       <strong>Raw AI Score: </strong> {activeReport.rawScore}
                     </p>
                   )}
+                  </div>
                 </div>
               
               {/* Image constrained to fit well in the report */}
