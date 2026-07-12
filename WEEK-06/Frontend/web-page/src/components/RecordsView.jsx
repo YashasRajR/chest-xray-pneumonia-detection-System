@@ -364,6 +364,10 @@ export default function RecordsView() {
                     src={activeReport.imagePath.startsWith('blob:') ? activeReport.imagePath : `/uploads/${activeReport.imagePath}`} 
                     alt="Radiograph" 
                     style={{ width: '100%', maxHeight: '200px', objectFit: 'contain', border: '1px solid #cccccc', marginBottom: '5px', background: '#000000' }} 
+                    onError={(e) => {
+                      e.target.onerror = null; 
+                      e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect width="200" height="200" fill="%23111"/><text x="50%" y="45%" dominant-baseline="middle" text-anchor="middle" fill="%23888" font-family="sans-serif" font-size="14">Image Unavailable</text><text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" fill="%23555" font-family="sans-serif" font-size="10">(Storage Reset)</text></svg>';
+                    }}
                   />
                   <span style={{ fontSize: '0.7rem', color: '#666666', fontWeight: 600 }}>Analyzed Radiograph</span>
                 </div>
