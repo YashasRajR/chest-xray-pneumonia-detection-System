@@ -7,7 +7,7 @@
 - Execute the code freeze and dependency lock.
 
 ## Code Freeze
-To guarantee that the software delivered today will compile and run flawlessly a year from now, the development environment was frozen. We utilized `pip freeze > requirements.txt` to lock the exact versions of TensorFlow, Flask, MediaPipe, and OpenCV used during development, protecting the system against future breaking changes in third-party libraries.
+To guarantee that the software delivered today will compile and run flawlessly a year from now, the development environment was frozen. We utilized `pip freeze > requirements.txt` to lock the exact versions of TensorFlow and Flask used during development, protecting the system against future breaking changes in third-party libraries.
 
 ## Final Reporting
 The culmination of the 8-week internship is documented in the massive `Final_Internship_Report_24162121033.md` file located in the root repository. It details every architectural decision, mathematical formula, empirical scaling result, and UI/UX design principle utilized throughout the project.
