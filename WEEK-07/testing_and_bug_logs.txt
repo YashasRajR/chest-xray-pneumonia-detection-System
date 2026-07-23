@@ -1,0 +1,24 @@
+# Week 7 - Testing and Bug Logs
+
+## Focus Area: System Testing & Quality Assurance
+
+### 1. Flask API Testing
+- **Test:** Uploading a non-image file renamed to `.jpg`.
+- **Result:** The system encountered an error when trying to process the file.
+- **Fix:** Added MIME type validation to check the actual file type before processing. The server now rejects invalid files and returns a standard HTTP 415 error.
+- **Test:** Uploading an unusually large image file.
+- **Result:** The server took longer than expected and consumed more memory.
+- **Fix:** Implemented a file size limit (5MB) on the frontend upload form to prevent performance issues.
+
+### 2. Frontend UX Updates
+- **Issue:** Network timeouts caused the frontend loading indicator to run indefinitely.
+- **Fix:** Updated the JavaScript logic to catch failed network requests. The UI now displays a simple error message to the user if the server is unreachable or returns an error status.
+- **UI Update:** Adjusted the CSS rules to ensure the layout displays properly on mobile devices.
+
+### 3. Gesture Module Adjustments
+- **Issue:** The output classification sometimes flickered between Open Palm and Closed Fist when the hand was held at a specific distance.
+- **Fix:** Implemented a simple smoothing algorithm (debouncing) using a buffer of recent frames. The output is now based on the most common result over a short period, which eliminated the flickering effect.
+
+### 4. Code Maintenance
+- **Action:** Removed outdated experimental files from earlier weeks.
+- **Action:** Formatted `app.py` and `hand_tracker.py` to follow standard Python styling guidelines (PEP 8), fixing minor indentation issues.

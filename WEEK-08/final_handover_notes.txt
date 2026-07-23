@@ -1,0 +1,26 @@
+# Week 8 - Final Handover Notes
+
+## Project Wrap-up & Documentation Logs
+
+### 1. Documentation Prepared
+- Created the main `README.md` for the repository.
+- **Setup Guide:** Included instructions for setting up a Python virtual environment and installing packages from `requirements.txt`.
+- **API Reference:** Documented the expected inputs and outputs for the Flask `/predict` endpoint.
+
+### 2. User Acceptance Testing (UAT) Summary
+- **Participants:** 3 team members tested the application.
+- **Task:** Upload a sample image and read the result.
+- **Feedback:** The interface was easy to use, and the drag-and-drop upload worked as expected.
+- **Updates Made:** Simplified a backend error message to be more user-friendly (changed technical HTTP error text to a clearer instruction regarding file types).
+
+### 3. Code Finalization
+- Checked for and removed unnecessary print statements in the Python scripts.
+- Verified that all required packages are correctly listed in `requirements.txt`.
+- Pushed all final changes to the main repository branch.
+
+### 4. Materials Handed Over
+- The trained MobileNetV2 model weights.
+- The source code for the Flask backend and web frontend.
+- The hand tracking Python scripts.
+- All 8 weekly progress reports.
+- The final project presentation slides.
