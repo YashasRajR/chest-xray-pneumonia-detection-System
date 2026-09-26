@@ -24,15 +24,27 @@ os.makedirs(UPLOADS_DIR, exist_ok=True)
 
 database_url = os.getenv('DATABASE_URL', 'sqlite:///' + os.path.join(BASE_DIR, 'database.db'))
 if database_url.startswith("postgres://"):
-    database_url = database_url.replace("postgres://", "postgresql://", 1)
+    database_url = database_url.replace("postgres://", "postgresql+psycopg2://", 1)
+elif database_url.startswith("postgresql://") and not database_url.startswith("postgresql+"):
+    database_url = database_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+
+# Ensure SSL mode is enabled for remote Render PostgreSQL connections
+if "render.com" in database_url and "sslmode" not in database_url:
+    separator = "&" if "?" in database_url else "?"
+    database_url = f"{database_url}{separator}sslmode=require"
+
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db.init_app(app)
 
-# Create tables
+# Create tables safely without crashing worker on transient startup network delays
 with app.app_context():
-    db.create_all()
+    try:
+        db.create_all()
+        print("Database tables initialized successfully.", flush=True)
+    except Exception as e:
+        print(f"Warning during db.create_all: {e}", flush=True)
 
 MODEL_PATH = os.path.join(BASE_DIR, 'models', 'mobilenetv2_pneumonia_model.keras')
 
