@@ -36,11 +36,18 @@ with app.app_context():
 
 MODEL_PATH = os.path.join(BASE_DIR, 'models', 'mobilenetv2_pneumonia_model.keras')
 
-# Pre-load the model when starting the server to avoid loading on every request
-try:
-    get_model(MODEL_PATH)
-except Exception as e:
-    print(f"Warning: Could not pre-load model: {e}")
+# Health check endpoints for Render port detection & uptime monitors
+@app.route('/health', methods=['GET'])
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    return jsonify({
+        'status': 'healthy',
+        'service': 'chest-xray-pneumonia-api',
+        'timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat()
+    }), 200
+
+# Note: Model is loaded lazily inside prediction.py on the first inference request
+# to ensure instant container startup and prevent Render port-detection timeouts.
 
 # --- JWT Middleware ---
 def token_required(f):

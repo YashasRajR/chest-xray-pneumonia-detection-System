@@ -1,16 +1,13 @@
 import os
 import numpy as np
 from PIL import Image
-import tensorflow as tf
-
-import keras
 
 # Global variable to hold the model in memory
 _model = None
 
 def get_model(model_path):
     """
-    Load the MobileNetV2 model once and keep it in memory.
+    Load the MobileNetV2 model lazily on first inference request and keep it in memory.
     Uses custom_objects to handle the MobileNetV2 preprocess_input Lambda layer.
     """
     global _model
@@ -18,8 +15,17 @@ def get_model(model_path):
         if not os.path.exists(model_path):
             raise FileNotFoundError(f"Model file not found at {model_path}")
         
-        print("Loading MobileNetV2 model...")
-        
+        print("Loading MobileNetV2 model...", flush=True)
+
+        # Optimize TensorFlow for minimal memory and single CPU core usage on cloud containers
+        os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+        os.environ["OMP_NUM_THREADS"] = "1"
+        os.environ["TF_NUM_INTRAOP_THREADS"] = "1"
+        os.environ["TF_NUM_INTEROP_THREADS"] = "1"
+
+        import tensorflow as tf
+        import keras
+
         # custom_objects is required to load a model containing a Lambda layer
         # if the Lambda layer wraps preprocess_input.
         custom_objects = {
@@ -29,9 +35,9 @@ def get_model(model_path):
         
         try:
             _model = keras.models.load_model(model_path, custom_objects=custom_objects)
-            print("Model loaded successfully.")
+            print("Model loaded successfully.", flush=True)
         except Exception as e:
-            print(f"Failed to load model: {e}")
+            print(f"Failed to load model: {e}", flush=True)
             raise e
             
     return _model
