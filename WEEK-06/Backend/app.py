@@ -15,23 +15,39 @@ app = Flask(__name__, static_folder='../Frontend/web-page/dist', static_url_path
 # Enable CORS for React frontend integration
 CORS(app)
 bcrypt = Bcrypt(app)
-app.config['SECRET_KEY'] = 'super-secret-key-for-jwt-2026'
+app.config['SECRET_KEY'] = 'super-secret-key-for-jwt-akshar-ai-pneumonia-system-2026'
 
 # Configure directories and database
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOADS_DIR = os.path.join(BASE_DIR, 'uploads')
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 
-database_url = os.getenv('DATABASE_URL', 'sqlite:///' + os.path.join(BASE_DIR, 'database.db'))
-if database_url.startswith("postgres://"):
-    database_url = database_url.replace("postgres://", "postgresql+psycopg2://", 1)
-elif database_url.startswith("postgresql://") and not database_url.startswith("postgresql+"):
-    database_url = database_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+raw_db_url = os.getenv('DATABASE_URL', '')
+sqlite_fallback_url = 'sqlite:///' + os.path.join(BASE_DIR, 'database.db')
 
-# Ensure SSL mode is enabled for remote Render PostgreSQL connections
-if "render.com" in database_url and "sslmode" not in database_url:
-    separator = "&" if "?" in database_url else "?"
-    database_url = f"{database_url}{separator}sslmode=require"
+if raw_db_url:
+    if raw_db_url.startswith("postgres://"):
+        raw_db_url = raw_db_url.replace("postgres://", "postgresql+psycopg2://", 1)
+    elif raw_db_url.startswith("postgresql://") and not raw_db_url.startswith("postgresql+"):
+        raw_db_url = raw_db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+
+    if "render.com" in raw_db_url and "sslmode" not in raw_db_url:
+        separator = "&" if "?" in raw_db_url else "?"
+        raw_db_url = f"{raw_db_url}{separator}sslmode=require"
+
+    # Test if remote database is active and responsive (e.g., handles expired free trial instances)
+    try:
+        from sqlalchemy import create_engine, text
+        test_engine = create_engine(raw_db_url, connect_args={'connect_timeout': 3})
+        with test_engine.connect() as test_conn:
+            test_conn.execute(text("SELECT 1"))
+        database_url = raw_db_url
+        print("Connected to remote PostgreSQL database successfully.", flush=True)
+    except Exception as db_err:
+        print(f"Warning: Remote DATABASE_URL is unreachable ({db_err}). Falling back to local SQLite.", flush=True)
+        database_url = sqlite_fallback_url
+else:
+    database_url = sqlite_fallback_url
 
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -94,106 +110,115 @@ from database import Patient, Technician
 
 @app.route('/register', methods=['POST'])
 def register():
-    data = request.get_json()
-    if not data or not data.get('email') or not data.get('password') or not data.get('name'):
-        return jsonify({'error': 'Missing required fields'}), 400
-        
-    role = data.get('role', 'patient')
-    
-    if role == 'technician':
-        if Technician.query.filter_by(email=data['email']).first():
-            return jsonify({'error': 'Email already registered'}), 400
-        
-        last_user = Technician.query.order_by(Technician.id.desc()).first()
-        last_seq = last_user.id if last_user else 0
-        new_id = f"EMP-{datetime.datetime.now().year}-{str(last_seq + 1).zfill(5)}"
-        
-        new_user = Technician(
-            employee_id=new_id,
-            name=data['name'],
-            email=data['email'],
-            password_hash=bcrypt.generate_password_hash(data['password']).decode('utf-8'),
-            nickname=data.get('nickname'),
-            mobile=data.get('mobile')
-        )
-        db.session.add(new_user)
-        db.session.commit()
-        return jsonify({'message': 'User created successfully', 'patient_id': new_id}), 201
-    else:
-        if Patient.query.filter_by(email=data['email']).first():
-            return jsonify({'error': 'Email already registered'}), 400
+    try:
+        data = request.get_json()
+        if not data or not data.get('email') or not data.get('password') or not data.get('name'):
+            return jsonify({'error': 'Missing required fields'}), 400
             
-        prefix = f"PNE-{datetime.datetime.now().year}"
-        last_user = Patient.query.filter(Patient.patient_id.like(f"{prefix}%")).order_by(Patient.patient_id.desc()).first()
-        last_seq = 0
-        if last_user and last_user.patient_id:
-            try:
-                last_seq = int(last_user.patient_id.split('-')[2])
-            except:
-                pass
-        new_patient_id = f"{prefix}-{str(last_seq + 1).zfill(6)}"
+        role = data.get('role', 'patient')
         
-        new_user = Patient(
-            patient_id=new_patient_id,
-            name=data['name'],
-            email=data['email'],
-            password_hash=bcrypt.generate_password_hash(data['password']).decode('utf-8'),
-            nickname=data.get('nickname'),
-            age=data.get('age'),
-            mobile=data.get('mobile')
-        )
-        db.session.add(new_user)
-        db.session.commit()
-        return jsonify({'message': 'User created successfully', 'patient_id': new_patient_id}), 201
+        if role == 'technician':
+            if Technician.query.filter_by(email=data['email']).first():
+                return jsonify({'error': 'Email already registered'}), 400
+            
+            last_user = Technician.query.order_by(Technician.id.desc()).first()
+            last_seq = last_user.id if last_user else 0
+            new_id = f"EMP-{datetime.datetime.now().year}-{str(last_seq + 1).zfill(5)}"
+            
+            new_user = Technician(
+                employee_id=new_id,
+                name=data['name'],
+                email=data['email'],
+                password_hash=bcrypt.generate_password_hash(data['password']).decode('utf-8'),
+                nickname=data.get('nickname'),
+                mobile=data.get('mobile')
+            )
+            db.session.add(new_user)
+            db.session.commit()
+            return jsonify({'message': 'User created successfully', 'patient_id': new_id}), 201
+        else:
+            if Patient.query.filter_by(email=data['email']).first():
+                return jsonify({'error': 'Email already registered'}), 400
+                
+            prefix = f"PNE-{datetime.datetime.now().year}"
+            last_user = Patient.query.filter(Patient.patient_id.like(f"{prefix}%")).order_by(Patient.patient_id.desc()).first()
+            last_seq = 0
+            if last_user and last_user.patient_id:
+                try:
+                    last_seq = int(last_user.patient_id.split('-')[2])
+                except:
+                    pass
+            new_patient_id = f"{prefix}-{str(last_seq + 1).zfill(6)}"
+            
+            new_user = Patient(
+                patient_id=new_patient_id,
+                name=data['name'],
+                email=data['email'],
+                password_hash=bcrypt.generate_password_hash(data['password']).decode('utf-8'),
+                nickname=data.get('nickname'),
+                age=data.get('age'),
+                mobile=data.get('mobile')
+            )
+            db.session.add(new_user)
+            db.session.commit()
+            return jsonify({'message': 'User created successfully', 'patient_id': new_patient_id}), 201
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error in register endpoint: {e}", flush=True)
+        return jsonify({'error': f'Registration failed: {str(e)}'}), 500
 
 @app.route('/login', methods=['POST'])
 def login():
-    data = request.get_json()
-    if not data or not data.get('email') or not data.get('password'):
-        return jsonify({'error': 'Missing credentials'}), 400
+    try:
+        data = request.get_json()
+        if not data or not data.get('email') or not data.get('password'):
+            return jsonify({'error': 'Missing credentials'}), 400
+            
+        requested_role = data.get('role')
+        user = None
+        role = None
         
-    requested_role = data.get('role')
-    user = None
-    role = None
-    
-    if requested_role == 'technician':
-        user = Technician.query.filter_by(email=data['email']).first()
-        role = 'technician'
-    elif requested_role == 'patient':
-        user = Patient.query.filter_by(email=data['email']).first()
-        role = 'patient'
-    else:
-        # Fallback if no role provided
-        user = Patient.query.filter_by(email=data['email']).first()
-        role = 'patient'
-        if not user:
+        if requested_role == 'technician':
             user = Technician.query.filter_by(email=data['email']).first()
             role = 'technician'
+        elif requested_role == 'patient':
+            user = Patient.query.filter_by(email=data['email']).first()
+            role = 'patient'
+        else:
+            # Fallback if no role provided
+            user = Patient.query.filter_by(email=data['email']).first()
+            role = 'patient'
+            if not user:
+                user = Technician.query.filter_by(email=data['email']).first()
+                role = 'technician'
+                
+        if not user:
+            return jsonify({'error': 'User not found in the selected role. Please register or switch roles.'}), 404
             
-    if not user:
-        return jsonify({'error': 'User not found in the selected role. Please register or switch roles.'}), 404
-        
-    if user and bcrypt.check_password_hash(user.password_hash, data['password']):
-        token = jwt.encode({
-            'user_id': user.id,
-            'role': role,
-            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
-        }, app.config['SECRET_KEY'], algorithm="HS256")
-        
-        return jsonify({
-            'token': token,
-            'user': {
-                'id': user.id, 
-                'name': user.name, 
-                'email': user.email, 
-                'patient_id': user.employee_id if role == 'technician' else user.patient_id, 
+        if user and bcrypt.check_password_hash(user.password_hash, data['password']):
+            token = jwt.encode({
+                'user_id': user.id,
                 'role': role,
-                'age': getattr(user, 'age', None),
-                'mobile': user.mobile
-            }
-        }), 200
-        
-    return jsonify({'error': 'Invalid email or password'}), 401
+                'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
+            }, app.config['SECRET_KEY'], algorithm="HS256")
+            
+            return jsonify({
+                'token': token,
+                'user': {
+                    'id': user.id, 
+                    'name': user.name, 
+                    'email': user.email, 
+                    'patient_id': user.employee_id if role == 'technician' else user.patient_id, 
+                    'role': role,
+                    'age': getattr(user, 'age', None),
+                    'mobile': user.mobile
+                }
+            }), 200
+            
+        return jsonify({'error': 'Invalid email or password'}), 401
+    except Exception as e:
+        print(f"Error in login endpoint: {e}", flush=True)
+        return jsonify({'error': f'Login failed: {str(e)}'}), 500
 
 @app.route('/api/user/update', methods=['PUT'])
 @token_required
