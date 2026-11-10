@@ -1,3 +1,9 @@
+<!-- profile-card:start -->
+<p align="center">
+  <a href="https://github.com/YashasRajR"><img src="https://raw.githubusercontent.com/YashasRajR/YashasRajR/main/cards/headers/chest-xray-pneumonia-detection-System.svg" width="100%" alt="Chest X-Ray Pneumonia Detection" /></a>
+</p>
+<!-- profile-card:end -->
+
 # Pneumonia Detection System & Human Behavior Tracking System
 
 **Live Website Deployment:** [https://chest-xray-pneumonia-detection-system.onrender.com](https://chest-xray-pneumonia-detection-system.onrender.com)
